@@ -1,4 +1,6 @@
 package com.agrosentinel.agrosentinel.models;
+import java.time.LocalDateTime;
+
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -25,5 +27,7 @@ public class Usuario {
     private String email;
     private String password;
     private String rol;
+    private Boolean activo = true;
+    private LocalDateTime ultimoAcceso;
 
 }
