@@ -2,6 +2,7 @@ package com.agrosentinel.agrosentinel.controllers;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -14,11 +15,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.agrosentinel.agrosentinel.models.Usuario;
 import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
+import com.agrosentinel.agrosentinel.services.JwtService;
 
 @RestController
 @RequestMapping("/api/auth")
 @CrossOrigin(origins = "http://localhost:5173")
 public class AuthController {
+    private static final Set<String> SELF_REGISTERABLE_ROLES = Set.of(
+            "TECNICO", "SUPERVISOR", "ALMACENISTA", "OPERATIVO_CAMPO");
 
     @Autowired
     private UsuarioRepository usuarioRepository;
@@ -26,11 +30,17 @@ public class AuthController {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private JwtService jwtService;
+
     // ==========================================
     // 1. ENDPOINT DE REGISTRO
     // ==========================================
     @PostMapping("/registro")
     public ResponseEntity<?> registrarUsuario(@RequestBody Usuario usuario) {
+        if (usuario.getRol() == null || !SELF_REGISTERABLE_ROLES.contains(usuario.getRol())) {
+            return ResponseEntity.status(403).body("El rol Administrador debe asignarse fuera del autorregistro.");
+        }
         if(usuarioRepository.existsByEmail(usuario.getEmail())) {
             return ResponseEntity.badRequest().body("Error: El email ya está en uso");
         }
@@ -55,12 +65,11 @@ public class AuthController {
             return ResponseEntity.status(401).body("Error: Credenciales incorrectas");
         }
         
-        // Por ahora simularemos un token, luego implementamos la librería JWT real
-        String tokenSimulado = "jwt_temporal_valido_para_" + usuario.getEmail();
+        String token = jwtService.createToken(usuario);
         
         // Armamos la respuesta JSON que espera el Frontend
         Map<String, String> response = new HashMap<>();
-        response.put("token", tokenSimulado);
+        response.put("token", token);
         response.put("rol", usuario.getRol()); // Ejemplo: "TECNICO"
         
         return ResponseEntity.ok(response);
