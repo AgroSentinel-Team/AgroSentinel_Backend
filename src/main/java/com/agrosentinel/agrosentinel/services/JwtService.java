@@ -45,7 +45,7 @@ public class JwtService {
         try {
             String header = encode(objectMapper.writeValueAsBytes(Map.of("alg", "HS256", "typ", "JWT")));
             String payload = encode(objectMapper.writeValueAsBytes(Map.of(
-                    "sub", usuario.getId().toString(),
+                    "sub", usuario.getEmail(),
                     "role", usuario.getRol(),
                     "exp", Instant.now().getEpochSecond() + tokenLifetimeSeconds)));
             String unsignedToken = header + "." + payload;
