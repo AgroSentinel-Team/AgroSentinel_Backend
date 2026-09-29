@@ -22,5 +22,6 @@ public record AssetRequest(
         LocalDate warrantyExpirationDate,
         String location,
         OperationalStatus operationalStatus,
-        Boolean isActive) {
+        Boolean isActive,
+        Boolean hasMotor) {
 }

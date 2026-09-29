@@ -74,6 +74,9 @@ public class Asset {
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 
+    @Column(name = "has_motor", nullable = false, columnDefinition = "boolean not null default false")
+    private boolean hasMotor = false;
+
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 

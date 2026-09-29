@@ -94,6 +94,9 @@ public class AssetService {
         if (request.isActive() != null) {
             asset.setActive(request.isActive());
         }
+        if (request.hasMotor() != null) {
+            asset.setHasMotor(request.hasMotor());
+        }
     }
 
     private Asset findAsset(Long id) {
@@ -117,7 +120,8 @@ public class AssetService {
                 asset.getExtraSpecifications(), asset.getCategory().getId(), asset.getCategory().getName(),
                 asset.getResponsible().getId(), asset.getResponsible().getNombre(), asset.getAcquisitionDate(),
                 asset.getAcquisitionCost(), asset.getProvider(), asset.getWarrantyExpirationDate(),
-                asset.getLocation(), asset.getOperationalStatus(), asset.isActive());
+                asset.getLocation(), asset.getOperationalStatus(), asset.isActive(), asset.isHasMotor(),
+                asset.isHasMotor() ? "MOTOR-" + asset.getId() : null);
     }
 
     private MaintenanceHistoryResponse toHistoryResponse(MaintenanceHistory history) {

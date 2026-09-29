@@ -22,5 +22,7 @@ public record AssetResponse(
         LocalDate warrantyExpirationDate,
         String location,
         OperationalStatus operationalStatus,
-        boolean isActive) {
+        boolean isActive,
+        boolean hasMotor,
+        String predictiveId) {
 }
