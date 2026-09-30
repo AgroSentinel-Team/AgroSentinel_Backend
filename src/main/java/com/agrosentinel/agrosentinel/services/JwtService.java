@@ -32,10 +32,10 @@ public class JwtService {
     public JwtService(
             ObjectMapper objectMapper,
             @Value("${agrosentinel.security.jwt-secret}") String secret,
-            @Value("${agrosentinel.security.jwt-lifetime-seconds:1800}") long tokenLifetimeSeconds) {
+            @Value("${agrosentinel.security.jwt-lifetime-seconds:3600}") long tokenLifetimeSeconds) {
         this.objectMapper = objectMapper;
         this.secret = secret.getBytes(StandardCharsets.UTF_8);
-        this.tokenLifetimeSeconds = Math.max(1800, tokenLifetimeSeconds);
+        this.tokenLifetimeSeconds = Math.max(3600, tokenLifetimeSeconds);
         if (this.secret.length < 32) {
             throw new IllegalArgumentException("JWT secret must contain at least 32 bytes");
         }

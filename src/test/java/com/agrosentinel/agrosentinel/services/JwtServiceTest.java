@@ -17,23 +17,24 @@ import tools.jackson.databind.ObjectMapper;
 
 class JwtServiceTest {
     @Test
-    void issuedTokenIsValidAndLastsAtLeastThirtyMinutes() {
+    void issuedTokenIsValidAndLastsAtLeastOneHour() {
         JwtService jwtService = new JwtService(
                 new ObjectMapper(), "test-jwt-secret-with-at-least-thirty-two-bytes", 1800);
         Usuario usuario = new Usuario();
         usuario.setId(42L);
+        usuario.setEmail("test@example.com");
         usuario.setRol("ADMINISTRADOR");
 
         String token = jwtService.createToken(usuario);
         Authentication authentication = jwtService.getAuthentication(token);
 
         assertNotNull(authentication);
-        assertEquals("42", authentication.getPrincipal());
+        assertEquals("test@example.com", authentication.getPrincipal());
         assertTrue(authentication.getAuthorities().stream()
                 .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMINISTRADOR")));
 
         JsonNode claims = new ObjectMapper().readTree(Base64.getUrlDecoder().decode(token.split("\\.")[1]));
         long remainingSeconds = claims.path("exp").asLong() - Instant.now().getEpochSecond();
-        assertTrue(remainingSeconds >= 1800);
+        assertTrue(remainingSeconds >= 3600);
     }
 }
