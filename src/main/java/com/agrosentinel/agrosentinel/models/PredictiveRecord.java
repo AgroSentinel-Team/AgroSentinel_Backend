@@ -60,7 +60,7 @@ public class PredictiveRecord {
     @Column(name = "motor_state", nullable = false)
     private String motorState;
 
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "double precision")
     private double confidence;
 
     @Column(name = "affected_components", nullable = false, columnDefinition = "text")
