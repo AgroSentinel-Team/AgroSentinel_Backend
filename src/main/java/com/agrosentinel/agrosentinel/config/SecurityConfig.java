@@ -34,6 +34,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/predictive/records").permitAll()
+                .requestMatchers("/api/failure-reports", "/api/failure-reports/**")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "OPERATIVO_CAMPO", "OPERARIO_CAMPO")
                 .requestMatchers("/api/categories/**", "/api/users/**", "/api/assets/**", "/api/usuarios/**")
                     .hasRole("ADMINISTRADOR")
                 .anyRequest().authenticated()

@@ -6,3 +6,8 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+    volumes:
+      - failure_evidence:/app/uploads/failure-evidence
+
+volumes:
+  failure_evidence:
