@@ -32,11 +32,15 @@ public class CategoryService {
         Category category = new Category();
         category.setName(request.name().trim());
         category.setDescription(request.description());
+        if (request.maintenanceFrequencyDays() != null) {
+            category.setMaintenanceFrequencyDays(request.maintenanceFrequencyDays());
+        }
         category.setActive(true);
         return toResponse(categoryRepository.save(category));
     }
 
     private CategoryResponse toResponse(Category category) {
-        return new CategoryResponse(category.getId(), category.getName(), category.getDescription(), category.isActive());
+        return new CategoryResponse(category.getId(), category.getName(), category.getDescription(),
+                category.isActive(), category.getMaintenanceFrequencyDays());
     }
 }

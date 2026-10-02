@@ -7,6 +7,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.agrosentinel.agrosentinel.models.Usuario;
@@ -19,6 +21,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+    private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     private final JwtService jwtService;
     private final UsuarioRepository usuarioRepository;
 
@@ -36,12 +39,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (authorization != null && authorization.startsWith("Bearer ")) {
             Authentication authentication = jwtService.getAuthentication(authorization.substring(7));
             if (authentication == null) {
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid or expired bearer token");
+                logger.warn("Rejected invalid or expired bearer token for {} {}", request.getMethod(), request.getRequestURI());
+                writeUnauthorized(response, "El token es inválido o venció. Inicia sesión nuevamente.");
                 return;
             }
             Usuario usuario = usuarioRepository.findByEmail(authentication.getName());
             if (usuario == null || Boolean.FALSE.equals(usuario.getActivo()) || usuario.getRol() == null) {
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Account is unavailable");
+                logger.warn("Rejected token for an unavailable account on {} {}", request.getMethod(), request.getRequestURI());
+                writeUnauthorized(response, "La cuenta asociada al token está inactiva o ya no existe.");
                 return;
             }
 
@@ -53,5 +58,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.getContext().setAuthentication(currentAuthentication);
         }
         filterChain.doFilter(request, response);
+    }
+
+    private void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json");
+        response.setCharacterEncoding("UTF-8");
+        response.getWriter().write("{\"message\":\"" + message + "\"}");
     }
 }

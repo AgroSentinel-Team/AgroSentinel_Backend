@@ -8,4 +8,6 @@ import com.agrosentinel.agrosentinel.models.MaintenanceHistory;
 
 public interface MaintenanceHistoryRepository extends JpaRepository<MaintenanceHistory, Long> {
     List<MaintenanceHistory> findAllByAssetIdOrderByMaintenanceDateDesc(Long assetId);
+
+    java.util.Optional<MaintenanceHistory> findByPreventiveMaintenanceId(Long preventiveMaintenanceId);
 }

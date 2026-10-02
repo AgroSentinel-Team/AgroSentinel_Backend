@@ -15,11 +15,15 @@ import com.agrosentinel.agrosentinel.dtos.MaintenanceHistoryResponse;
 import com.agrosentinel.agrosentinel.models.Asset;
 import com.agrosentinel.agrosentinel.models.Category;
 import com.agrosentinel.agrosentinel.models.MaintenanceHistory;
+import com.agrosentinel.agrosentinel.models.MaintenanceHistoryStatus;
+import com.agrosentinel.agrosentinel.models.MaintenanceType;
 import com.agrosentinel.agrosentinel.models.OperationalStatus;
+import com.agrosentinel.agrosentinel.models.PreventiveMaintenanceStatus;
 import com.agrosentinel.agrosentinel.models.Usuario;
 import com.agrosentinel.agrosentinel.repositories.AssetRepository;
 import com.agrosentinel.agrosentinel.repositories.CategoryRepository;
 import com.agrosentinel.agrosentinel.repositories.MaintenanceHistoryRepository;
+import com.agrosentinel.agrosentinel.repositories.PreventiveMaintenanceRepository;
 import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -32,6 +36,7 @@ public class AssetService {
     private final CategoryRepository categoryRepository;
     private final UsuarioRepository usuarioRepository;
     private final MaintenanceHistoryRepository maintenanceHistoryRepository;
+    private final PreventiveMaintenanceRepository preventiveMaintenanceRepository;
 
     public List<AssetResponse> findAll() {
         return assetRepository.findAll().stream().map(this::toResponse).toList();
@@ -65,14 +70,39 @@ public class AssetService {
         assetRepository.save(asset);
     }
 
+    @Transactional
     public AssetResumeResponse getResume(Long id) {
         Asset asset = findAsset(id);
+        ensureScheduledPreventiveHistory(asset);
         List<MaintenanceHistoryResponse> history = maintenanceHistoryRepository
                 .findAllByAssetIdOrderByMaintenanceDateDesc(id)
                 .stream()
                 .map(this::toHistoryResponse)
                 .toList();
         return new AssetResumeResponse(toResponse(asset), history);
+    }
+
+    private void ensureScheduledPreventiveHistory(Asset asset) {
+        preventiveMaintenanceRepository
+                .findAllByAssetIdAndStatusOrderByScheduledAtAsc(
+                        asset.getId(), PreventiveMaintenanceStatus.SCHEDULED)
+                .forEach(maintenance -> {
+                    if (maintenanceHistoryRepository.findByPreventiveMaintenanceId(maintenance.getId()).isPresent()) {
+                        return;
+                    }
+
+                    MaintenanceHistory history = new MaintenanceHistory();
+                    history.setAsset(asset);
+                    history.setPreventiveMaintenance(maintenance);
+                    history.setType(MaintenanceType.PREVENTIVE);
+                    history.setStatus(MaintenanceHistoryStatus.SCHEDULED);
+                    history.setMaintenanceDate(maintenance.getScheduledAt().toLocalDate());
+                    history.setScheduledAt(maintenance.getScheduledAt());
+                    history.setTechnicianName(maintenance.getTechnician().getNombre());
+                    history.setTasksDescription(
+                            "Mantenimiento preventivo programado para " + asset.getName() + ".");
+                    maintenanceHistoryRepository.save(history);
+                });
     }
 
     private void applyRequest(Asset asset, AssetRequest request) {
@@ -127,6 +157,13 @@ public class AssetService {
     private MaintenanceHistoryResponse toHistoryResponse(MaintenanceHistory history) {
         return new MaintenanceHistoryResponse(
                 history.getId(), history.getMaintenanceDate(), history.getType(), history.getTasksDescription(),
-                history.getCost(), history.getProvider(), history.getNextRecommendedDate());
+                history.getCost(), history.getProvider(), history.getNextRecommendedDate(), history.getStatus(),
+                history.getScheduledAt(), history.getExecutedAt(), history.getTechnicianName(),
+                history.getReplacedParts(), history.getSignedAt(),
+                history.getPreventiveMaintenance() == null
+                        ? List.of()
+                        : history.getPreventiveMaintenance().getEvidences().stream()
+                                .map(evidence -> evidence.getUrl())
+                                .toList());
     }
 }

@@ -34,14 +34,26 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/predictive/records").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/assets", "/api/users")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
+                .requestMatchers(HttpMethod.GET, "/api/categories")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
+                .requestMatchers("/api/preventive-maintenances/**")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
+                .requestMatchers("/uploads/maintenance-evidence/**")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
                 .requestMatchers("/api/failure-reports", "/api/failure-reports/**")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "OPERATIVO_CAMPO", "OPERARIO_CAMPO")
                 .requestMatchers("/api/categories/**", "/api/users/**", "/api/assets/**", "/api/usuarios/**")
                     .hasRole("ADMINISTRADOR")
                 .anyRequest().authenticated()
             )
-            .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(
-                (request, response, exception) -> response.sendError(401, "Authentication required")))
+                .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, exception) -> {
+                    response.setStatus(401);
+                    response.setContentType("application/json");
+                    response.setCharacterEncoding("UTF-8");
+                    response.getWriter().write("{\"message\":\"Se requiere un token Bearer válido para este endpoint.\"}");
+                }))
             .addFilterBefore(
                 new JwtAuthenticationFilter(jwtService, usuarioRepository),
                 UsernamePasswordAuthenticationFilter.class);

@@ -19,7 +19,8 @@ public class UserDirectoryService {
 
     public List<UserOptionResponse> findAllOptions() {
         return usuarioRepository.findAll().stream()
-                .map(usuario -> new UserOptionResponse(usuario.getId(), usuario.getNombre()))
+                .filter(usuario -> !Boolean.FALSE.equals(usuario.getActivo()))
+                .map(usuario -> new UserOptionResponse(usuario.getId(), usuario.getNombre(), usuario.getRol()))
                 .sorted(Comparator.comparing(UserOptionResponse::nombre, String.CASE_INSENSITIVE_ORDER))
                 .toList();
     }

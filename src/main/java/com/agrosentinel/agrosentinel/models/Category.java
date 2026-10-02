@@ -25,6 +25,9 @@ public class Category {
 
     private String description;
 
+    @Column(name = "maintenance_frequency_days", nullable = false, columnDefinition = "integer not null default 90")
+    private int maintenanceFrequencyDays = 90;
+
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 }
