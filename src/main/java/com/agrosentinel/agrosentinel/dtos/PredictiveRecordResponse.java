@@ -14,6 +14,8 @@ public record PredictiveRecordResponse(
         double energyConsumption,
         int machineStatus,
         int predictionClass,
+        String tipoFallaPredicha,
+        String fallaRealConfirmada,
         String motorState,
         double confidence,
         String affectedComponents) {

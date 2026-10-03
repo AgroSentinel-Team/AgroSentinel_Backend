@@ -18,6 +18,7 @@ public record PredictiveRecordRequest(
         @NotNull Double energyConsumption,
         @NotNull @Min(0) @Max(1) Integer machineStatus,
         @NotNull @Min(0) @Max(1) Integer predictionClass,
+        String tipoFallaPredicha,
         @NotBlank String motorState,
         @NotNull @Min(0) @Max(1) Double confidence,
         @NotBlank String affectedComponents) {

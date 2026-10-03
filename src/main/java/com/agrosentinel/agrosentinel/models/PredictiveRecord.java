@@ -57,6 +57,12 @@ public class PredictiveRecord {
     @Column(name = "prediction_class", nullable = false)
     private int predictionClass;
 
+    @Column(name = "tipo_falla_predicha")
+    private String tipoFallaPredicha;
+
+    @Column(name = "falla_real_confirmada")
+    private String fallaRealConfirmada;
+
     @Column(name = "motor_state", nullable = false)
     private String motorState;
 

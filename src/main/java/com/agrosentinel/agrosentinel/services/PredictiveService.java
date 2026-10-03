@@ -8,8 +8,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import com.agrosentinel.agrosentinel.dtos.PredictiveAssetResponse;
+import com.agrosentinel.agrosentinel.dtos.PredictiveFeedbackRequest;
 import com.agrosentinel.agrosentinel.dtos.PredictiveRecordRequest;
 import com.agrosentinel.agrosentinel.dtos.PredictiveRecordResponse;
 import com.agrosentinel.agrosentinel.models.Asset;
@@ -28,6 +31,9 @@ public class PredictiveService {
 
     @Value("${agrosentinel.predictive.api-token}")
     private String apiToken;
+
+    @Value("${agrosentinel.predictive.api-url}")
+    private String predictiveApiUrl;
 
     @Transactional
     public PredictiveRecordResponse create(PredictiveRecordRequest request, String token) {
@@ -55,6 +61,7 @@ public class PredictiveService {
         record.setEnergyConsumption(request.energyConsumption());
         record.setMachineStatus(request.machineStatus());
         record.setPredictionClass(request.predictionClass());
+        record.setTipoFallaPredicha(request.tipoFallaPredicha());
         record.setMotorState(request.motorState());
         record.setConfidence(request.confidence());
         record.setAffectedComponents(request.affectedComponents());
@@ -78,6 +85,32 @@ public class PredictiveService {
                 .toList();
     }
 
+    @Transactional
+    public PredictiveRecordResponse confirmFeedback(Long id, PredictiveFeedbackRequest request) {
+        PredictiveRecord record = predictiveRecordRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "No se encontró la lectura predictiva"));
+
+        try {
+            RestClient.create(predictiveApiUrl)
+                    .put()
+                    .uri("/historial/{id}/feedback", record.getId())
+                    .header("X-Predictive-Token", apiToken)
+                    .body(new PredictiveFeedbackRequest(
+                            request.fallaRealConfirmada(), record.getMachineId(), record.getTimestamp()))
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientException error) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "No fue posible sincronizar la validación con el servicio predictivo.",
+                    error);
+        }
+
+        record.setFallaRealConfirmada(request.fallaRealConfirmada().trim());
+        return toResponse(predictiveRecordRepository.save(record));
+    }
+
     private Asset findAsset(Long id) {
         return assetRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Activo no encontrado"));
@@ -98,6 +131,7 @@ public class PredictiveService {
                 record.getId(), record.getAsset().getId(), record.getMachineId(), record.getTimestamp(),
                 record.getTemperature(), record.getVibration(), record.getHumidity(), record.getPressure(),
                 record.getEnergyConsumption(), record.getMachineStatus(), record.getPredictionClass(),
-                record.getMotorState(), record.getConfidence(), record.getAffectedComponents());
+                record.getTipoFallaPredicha(), record.getFallaRealConfirmada(), record.getMotorState(),
+                record.getConfidence(), record.getAffectedComponents());
     }
 }

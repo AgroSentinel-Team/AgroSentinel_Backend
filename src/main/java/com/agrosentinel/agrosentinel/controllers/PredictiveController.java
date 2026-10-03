@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.agrosentinel.agrosentinel.dtos.PredictiveAssetResponse;
+import com.agrosentinel.agrosentinel.dtos.PredictiveFeedbackRequest;
 import com.agrosentinel.agrosentinel.dtos.PredictiveRecordRequest;
 import com.agrosentinel.agrosentinel.dtos.PredictiveRecordResponse;
 import com.agrosentinel.agrosentinel.services.PredictiveService;
@@ -42,5 +44,12 @@ public class PredictiveController {
     @GetMapping("/assets/{assetId}/history")
     public List<PredictiveRecordResponse> history(@PathVariable Long assetId) {
         return predictiveService.history(assetId);
+    }
+
+    @PutMapping("/records/{id}/feedback")
+    public PredictiveRecordResponse feedback(
+            @PathVariable Long id,
+            @Valid @RequestBody PredictiveFeedbackRequest request) {
+        return predictiveService.confirmFeedback(id, request);
     }
 }
