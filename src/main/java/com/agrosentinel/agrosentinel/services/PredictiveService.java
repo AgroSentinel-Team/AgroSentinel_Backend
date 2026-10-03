@@ -46,13 +46,13 @@ public class PredictiveService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El activo no está marcado como motor");
         }
         String expectedMachineId = machineId(asset);
-        if (!expectedMachineId.equals(request.machineId())) {
+        if (!expectedMachineId.equals(normalizeMachineId(request.machineId()))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El ID predictivo no corresponde al activo");
         }
 
         PredictiveRecord record = new PredictiveRecord();
         record.setAsset(asset);
-        record.setMachineId(request.machineId());
+        record.setMachineId(expectedMachineId);
         record.setTimestamp(request.timestamp() == null ? LocalDateTime.now() : request.timestamp());
         record.setTemperature(request.temperature());
         record.setVibration(request.vibration());
@@ -124,6 +124,10 @@ public class PredictiveService {
 
     private String machineId(Asset asset) {
         return "MOTOR-" + asset.getId();
+    }
+
+    private String normalizeMachineId(String machineId) {
+        return machineId == null ? "" : machineId.replaceFirst("^MOTOR-0+(?=\\d+$)", "MOTOR-");
     }
 
     private PredictiveRecordResponse toResponse(PredictiveRecord record) {
