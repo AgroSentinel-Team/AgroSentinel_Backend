@@ -33,6 +33,12 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/inventory/items")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "ALMACENISTA", "TECNICO")
+                .requestMatchers("/api/inventory/tasks", "/api/inventory/tasks/**")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "ALMACENISTA")
+                .requestMatchers("/api/inventory/**")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "ALMACENISTA")
                 .requestMatchers(HttpMethod.POST, "/api/predictive/records").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/api/predictive/records/*/feedback")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
