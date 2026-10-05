@@ -10,5 +10,6 @@ public record FailureReportRequest(
         @NotNull Long assetId,
         @NotBlank @Size(max = 120) String tipoFalla,
         @NotNull FailurePriority prioridad,
-        @NotBlank @Size(max = 5000) String descripcion) {
+        @NotBlank @Size(max = 5000) String descripcion,
+        Long groupId) {
 }

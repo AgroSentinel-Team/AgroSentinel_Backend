@@ -7,7 +7,9 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.agrosentinel.agrosentinel.models.Usuario;
 import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
 import com.agrosentinel.agrosentinel.services.JwtService;
+import com.agrosentinel.agrosentinel.services.UserRoleService;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -33,6 +36,9 @@ public class AuthController {
 
     @Autowired
     private JwtService jwtService;
+
+    @Autowired
+    private UserRoleService userRoleService;
 
     @PostMapping("/registro")
     public ResponseEntity<?> registrarUsuario(@RequestBody Usuario usuario) {
@@ -63,6 +69,26 @@ public class AuthController {
         usuario.setUltimoAcceso(LocalDateTime.now());
         usuarioRepository.save(usuario);
 
-        return ResponseEntity.ok(Map.of("token", token, "rol", usuario.getRol()));
+        return ResponseEntity.ok(Map.of(
+                "token", token,
+                "rol", usuario.getRol(),
+                "nombre", usuario.getNombre(),
+                "roles", userRoleService.getEffectiveRoles(usuario)));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<?> currentUser(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Se requiere autenticación");
+        }
+        Usuario usuario = usuarioRepository.findByEmail(authentication.getName());
+        if (usuario == null || Boolean.FALSE.equals(usuario.getActivo())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Usuario autenticado no disponible");
+        }
+        return ResponseEntity.ok(Map.of(
+                "nombre", usuario.getNombre(),
+                "email", usuario.getEmail(),
+                "rol", usuario.getRol(),
+                "roles", userRoleService.getEffectiveRoles(usuario)));
     }
 }

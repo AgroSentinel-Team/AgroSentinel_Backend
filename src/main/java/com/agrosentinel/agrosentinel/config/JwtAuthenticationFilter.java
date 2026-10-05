@@ -1,7 +1,6 @@
 package com.agrosentinel.agrosentinel.config;
 
 import java.io.IOException;
-import java.util.List;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -14,6 +13,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import com.agrosentinel.agrosentinel.models.Usuario;
 import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
 import com.agrosentinel.agrosentinel.services.JwtService;
+import com.agrosentinel.agrosentinel.services.UserRoleService;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -24,10 +24,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     private final JwtService jwtService;
     private final UsuarioRepository usuarioRepository;
+    private final UserRoleService userRoleService;
 
-    public JwtAuthenticationFilter(JwtService jwtService, UsuarioRepository usuarioRepository) {
+    public JwtAuthenticationFilter(
+            JwtService jwtService, UsuarioRepository usuarioRepository, UserRoleService userRoleService) {
         this.jwtService = jwtService;
         this.usuarioRepository = usuarioRepository;
+        this.userRoleService = userRoleService;
     }
 
     @Override
@@ -50,11 +53,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
 
-            String authority = usuario.getRol().startsWith("ROLE_")
-                    ? usuario.getRol()
-                    : "ROLE_" + usuario.getRol();
             Authentication currentAuthentication = new UsernamePasswordAuthenticationToken(
-                    usuario.getEmail(), null, List.of(new SimpleGrantedAuthority(authority)));
+                    usuario.getEmail(), null, userRoleService.getEffectiveRoles(usuario).stream()
+                            .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
+                            .toList());
             SecurityContextHolder.getContext().setAuthentication(currentAuthentication);
         }
         filterChain.doFilter(request, response);

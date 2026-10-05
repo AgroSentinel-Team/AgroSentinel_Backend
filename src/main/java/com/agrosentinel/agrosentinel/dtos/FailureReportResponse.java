@@ -16,5 +16,14 @@ public record FailureReportResponse(
         String descripcion,
         LocalDateTime fechaReporte,
         FailureStatus estado,
-        String evidenciaUrl) {
+        String evidenciaUrl,
+        Long groupId,
+        String groupName,
+        Long assignedTechnicianId,
+        String assignedTechnicianName,
+        LocalDateTime fechaInicioRevision,
+        String assetBrand,
+        String assetModel,
+        String assetSerialNumber,
+        String assetInventoryCode) {
 }

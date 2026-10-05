@@ -10,4 +10,6 @@ public interface FailureReportRepository extends JpaRepository<FailureReport, Lo
     List<FailureReport> findAllByOrderByFechaReporteDesc();
 
     List<FailureReport> findAllByUserIdOrderByFechaReporteDesc(Long userId);
+
+    List<FailureReport> findAllByAssignedTechnicianIdOrderByFechaReporteDesc(Long technicianId);
 }

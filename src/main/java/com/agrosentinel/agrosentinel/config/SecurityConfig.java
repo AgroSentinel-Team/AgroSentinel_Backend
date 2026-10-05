@@ -19,6 +19,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
 import com.agrosentinel.agrosentinel.services.JwtService;
+import com.agrosentinel.agrosentinel.services.UserRoleService;
 
 @Configuration
 public class SecurityConfig {
@@ -27,7 +28,8 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(
             HttpSecurity http,
             JwtService jwtService,
-            UsuarioRepository usuarioRepository) throws Exception {
+            UsuarioRepository usuarioRepository,
+            UserRoleService userRoleService) throws Exception {
         http
             .cors(Customizer.withDefaults())
             .csrf(csrf -> csrf.disable())
@@ -46,16 +48,26 @@ public class SecurityConfig {
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
                 .requestMatchers(HttpMethod.GET, "/api/assets", "/api/users")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
+                .requestMatchers(HttpMethod.GET, "/api/assets/*/resume")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
+                .requestMatchers("/api/work-groups/options")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA",
+                            "OPERATIVO_CAMPO", "OPERARIO_CAMPO")
+                .requestMatchers("/api/work-groups/**")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/categories")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
                 .requestMatchers("/api/preventive-maintenances/**")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
+                .requestMatchers("/api/maintenance-history/**")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
                 .requestMatchers("/uploads/maintenance-evidence/**")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
                 .requestMatchers("/api/failure-reports", "/api/failure-reports/**")
-                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "OPERATIVO_CAMPO", "OPERARIO_CAMPO")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA",
+                            "OPERATIVO_CAMPO", "OPERARIO_CAMPO")
                 .requestMatchers("/api/categories/**", "/api/users/**", "/api/assets/**", "/api/usuarios/**")
-                    .hasRole("ADMINISTRADOR")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN")
                 .anyRequest().authenticated()
             )
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, exception) -> {
@@ -65,7 +77,7 @@ public class SecurityConfig {
                     response.getWriter().write("{\"message\":\"Se requiere un token Bearer válido para este endpoint.\"}");
                 }))
             .addFilterBefore(
-                new JwtAuthenticationFilter(jwtService, usuarioRepository),
+                new JwtAuthenticationFilter(jwtService, usuarioRepository, userRoleService),
                 UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -131,8 +132,10 @@ class PreventiveMaintenanceServiceTest {
             UsuarioRepository usuarioRepository,
             MaintenanceHistoryRepository historyRepository,
             PreventiveMaintenanceEvidenceStorageService evidenceStorageService) {
-        return new PreventiveMaintenanceService(
-                maintenanceRepository, assetRepository, usuarioRepository, historyRepository, evidenceStorageService);
+        UserRoleService userRoleService = mock(UserRoleService.class);
+        when(userRoleService.getEffectiveRoles(any(Usuario.class))).thenReturn(Set.of("TECNICO"));
+        return new PreventiveMaintenanceService(maintenanceRepository, assetRepository, usuarioRepository,
+                historyRepository, evidenceStorageService, userRoleService);
     }
 
     private Asset asset() {

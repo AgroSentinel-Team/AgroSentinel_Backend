@@ -44,6 +44,7 @@ public class PreventiveMaintenanceService {
     private final UsuarioRepository usuarioRepository;
     private final MaintenanceHistoryRepository maintenanceHistoryRepository;
     private final PreventiveMaintenanceEvidenceStorageService evidenceStorageService;
+    private final UserRoleService userRoleService;
 
     public List<PreventiveMaintenanceResponse> findAll(Authentication authentication) {
         List<PreventiveMaintenance> maintenances = isAdministrator(authentication)
@@ -69,7 +70,8 @@ public class PreventiveMaintenanceService {
         }
         Usuario technician = usuarioRepository.findById(request.technicianId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Técnico no encontrado"));
-        if (Boolean.FALSE.equals(technician.getActivo()) || !isTechnician(technician.getRol())) {
+        if (Boolean.FALSE.equals(technician.getActivo())
+                || !userRoleService.getEffectiveRoles(technician).contains("TECNICO")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecciona un técnico activo");
         }
 
@@ -223,10 +225,6 @@ public class PreventiveMaintenanceService {
         return authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .anyMatch(authority -> authority.equals("ROLE_ADMIN") || authority.equals("ROLE_ADMINISTRADOR"));
-    }
-
-    private boolean isTechnician(String role) {
-        return role != null && role.toUpperCase().replaceFirst("^ROLE_", "").equals("TECNICO");
     }
 
     private PreventiveMaintenanceStatus toStatus(MaintenanceOutcome outcome) {

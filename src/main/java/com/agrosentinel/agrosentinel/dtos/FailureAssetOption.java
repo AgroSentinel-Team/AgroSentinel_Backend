@@ -8,6 +8,7 @@ public record FailureAssetOption(
         String brand,
         String model,
         String serialNumber,
+        String inventoryCode,
         String location,
         Long responsibleId,
         String responsibleName,

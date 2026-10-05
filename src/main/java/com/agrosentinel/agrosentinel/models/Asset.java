@@ -43,6 +43,9 @@ public class Asset {
     @Column(name = "serial_number", unique = true)
     private String serialNumber;
 
+    @Column(name = "inventory_code", length = 80)
+    private String inventoryCode;
+
     @Column(name = "extra_specifications", columnDefinition = "text")
     private String extraSpecifications;
 

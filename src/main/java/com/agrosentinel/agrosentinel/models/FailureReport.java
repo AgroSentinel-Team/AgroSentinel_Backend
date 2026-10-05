@@ -36,6 +36,14 @@ public class FailureReport {
     @JoinColumn(name = "user_id", nullable = false)
     private Usuario user;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id")
+    private WorkGroup group;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_technician_id")
+    private Usuario assignedTechnician;
+
     @Column(name = "tipo_falla", nullable = false, length = 120)
     private String tipoFalla;
 
@@ -48,6 +56,9 @@ public class FailureReport {
 
     @Column(name = "fecha_reporte", nullable = false)
     private LocalDateTime fechaReporte;
+
+    @Column(name = "fecha_inicio_revision")
+    private LocalDateTime fechaInicioRevision;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)

@@ -11,6 +11,7 @@ public record AssetResponse(
         String brand,
         String model,
         String serialNumber,
+        String inventoryCode,
         String extraSpecifications,
         Long categoryId,
         String categoryName,

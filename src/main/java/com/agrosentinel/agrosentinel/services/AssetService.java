@@ -12,6 +12,7 @@ import com.agrosentinel.agrosentinel.dtos.AssetRequest;
 import com.agrosentinel.agrosentinel.dtos.AssetResponse;
 import com.agrosentinel.agrosentinel.dtos.AssetResumeResponse;
 import com.agrosentinel.agrosentinel.dtos.MaintenanceHistoryResponse;
+import com.agrosentinel.agrosentinel.dtos.MaintenancePartResponse;
 import com.agrosentinel.agrosentinel.models.Asset;
 import com.agrosentinel.agrosentinel.models.Category;
 import com.agrosentinel.agrosentinel.models.MaintenanceHistory;
@@ -82,6 +83,12 @@ public class AssetService {
         return new AssetResumeResponse(toResponse(asset), history);
     }
 
+    public List<MaintenanceHistoryResponse> getTechnicianHistory(Long technicianId) {
+        return maintenanceHistoryRepository.findAllExecutedByTechnicianId(technicianId).stream()
+                .map(this::toHistoryResponse)
+                .toList();
+    }
+
     private void ensureScheduledPreventiveHistory(Asset asset) {
         preventiveMaintenanceRepository
                 .findAllByAssetIdAndStatusOrderByScheduledAtAsc(
@@ -110,6 +117,9 @@ public class AssetService {
         asset.setBrand(request.brand());
         asset.setModel(request.model());
         asset.setSerialNumber(request.serialNumber());
+        asset.setInventoryCode(request.inventoryCode() == null || request.inventoryCode().isBlank()
+                ? null
+                : request.inventoryCode().trim());
         asset.setExtraSpecifications(request.extraSpecifications());
         asset.setCategory(findCategory(request.categoryId()));
         asset.setResponsible(findResponsible(request.responsibleId()));
@@ -147,7 +157,7 @@ public class AssetService {
     private AssetResponse toResponse(Asset asset) {
         return new AssetResponse(
                 asset.getId(), asset.getName(), asset.getBrand(), asset.getModel(), asset.getSerialNumber(),
-                asset.getExtraSpecifications(), asset.getCategory().getId(), asset.getCategory().getName(),
+                asset.getInventoryCode(), asset.getExtraSpecifications(), asset.getCategory().getId(), asset.getCategory().getName(),
                 asset.getResponsible().getId(), asset.getResponsible().getNombre(), asset.getAcquisitionDate(),
                 asset.getAcquisitionCost(), asset.getProvider(), asset.getWarrantyExpirationDate(),
                 asset.getLocation(), asset.getOperationalStatus(), asset.isActive(), asset.isHasMotor(),
@@ -160,10 +170,30 @@ public class AssetService {
                 history.getCost(), history.getProvider(), history.getNextRecommendedDate(), history.getStatus(),
                 history.getScheduledAt(), history.getExecutedAt(), history.getTechnicianName(),
                 history.getReplacedParts(), history.getSignedAt(),
-                history.getPreventiveMaintenance() == null
-                        ? List.of()
-                        : history.getPreventiveMaintenance().getEvidences().stream()
-                                .map(evidence -> evidence.getUrl())
-                                .toList());
+                history.getPreventiveMaintenance() != null
+                        ? history.getPreventiveMaintenance().getEvidences().stream()
+                                .map(evidence -> evidence.getUrl()).toList()
+                        : history.getFailureReport() != null && history.getFailureReport().getEvidenciaUrl() != null
+                                ? List.of(history.getFailureReport().getEvidenciaUrl())
+                                : List.of(),
+                history.getFailureReport() == null ? null : history.getFailureReport().getId(),
+                history.getEquipmentIntervened(),
+                history.getInitialReportedSymptom(),
+                history.getInterventionReportedAt(),
+                history.getInspectionStartedAt(),
+                history.getActualFailure(),
+                history.getRootCause(),
+                history.getWorkMinutes(),
+                history.getParts().stream()
+                        .map(part -> new MaintenancePartResponse(
+                                part.getPartNumber(), part.getName(), part.getBrand(), part.getQuantity()))
+                        .toList(),
+                history.getTestsPerformed(),
+                history.getFinalEquipmentState(),
+                history.getRecommendations(),
+                history.getPendingTasks(),
+                history.getReceivedBy(),
+                history.getAsset().getId(),
+                history.getAsset().getName());
     }
 }
