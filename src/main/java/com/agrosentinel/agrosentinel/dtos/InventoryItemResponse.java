@@ -8,5 +8,7 @@ public record InventoryItemResponse(
         String category,
         BigDecimal stock,
         String unit,
-        BigDecimal minimum) {
+        BigDecimal minimum,
+        Long groupId,
+        String groupName) {
 }

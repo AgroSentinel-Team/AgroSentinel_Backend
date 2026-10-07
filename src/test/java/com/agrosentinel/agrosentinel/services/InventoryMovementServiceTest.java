@@ -9,11 +9,14 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.agrosentinel.agrosentinel.dtos.InventoryMovementRequest;
@@ -22,14 +25,18 @@ import com.agrosentinel.agrosentinel.dtos.InventoryInitialEntryRequest;
 import com.agrosentinel.agrosentinel.models.InventoryItem;
 import com.agrosentinel.agrosentinel.models.InventoryMovement;
 import com.agrosentinel.agrosentinel.models.InventoryMovementType;
+import com.agrosentinel.agrosentinel.models.WorkGroup;
 import com.agrosentinel.agrosentinel.repositories.InventoryItemRepository;
 import com.agrosentinel.agrosentinel.repositories.InventoryMovementRepository;
+import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
+import com.agrosentinel.agrosentinel.repositories.WorkGroupRepository;
 
 import static org.mockito.Mockito.mock;
 
 class InventoryMovementServiceTest {
     private InventoryItemRepository itemRepository;
     private InventoryMovementRepository movementRepository;
+    private WorkGroupRepository workGroupRepository;
     private InventoryMovementService service;
     private InventoryItem item;
 
@@ -37,7 +44,9 @@ class InventoryMovementServiceTest {
     void setUp() {
         itemRepository = mock(InventoryItemRepository.class);
         movementRepository = mock(InventoryMovementRepository.class);
-        service = new InventoryMovementService(itemRepository, movementRepository);
+        workGroupRepository = mock(WorkGroupRepository.class);
+        service = new InventoryMovementService(
+                itemRepository, movementRepository, workGroupRepository, mock(UsuarioRepository.class));
         item = new InventoryItem();
         item.setId(7L);
         item.setName("Filtro de aceite");
@@ -96,6 +105,22 @@ class InventoryMovementServiceTest {
     }
 
     @Test
+    void registerMovementRejectsItemOutsideSelectedGroup() {
+        ResponseStatusException exception = assertThrows(
+                ResponseStatusException.class,
+                () -> service.registerMovement(
+                        7L,
+                        new InventoryMovementRequest(
+                                InventoryMovementType.ENTRADA, new BigDecimal("1.000"), "Reposición", 9L, false),
+                        "warehouse@agrosentinel.test",
+                        "ROLE_ALMACENISTA"));
+
+        assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
+        verify(itemRepository, never()).save(item);
+        verify(movementRepository, never()).save(any(InventoryMovement.class));
+    }
+
+    @Test
     void createNewItemAndInitialEntryTogether() {
         when(itemRepository.save(any(InventoryItem.class))).thenAnswer(invocation -> {
             InventoryItem createdItem = invocation.getArgument(0);
@@ -106,7 +131,7 @@ class InventoryMovementServiceTest {
         InventoryMovementResponse response = service.registerInitialEntry(
                 new InventoryInitialEntryRequest(
                         "Semillas", "Insumos", "kg",
-                        new BigDecimal("5.000"), new BigDecimal("20.000"), "Compra inicial"),
+                        new BigDecimal("5.000"), new BigDecimal("20.000"), "Compra inicial", null),
                 "warehouse@agrosentinel.test",
                 "ROLE_ALMACENISTA");
 
@@ -115,5 +140,33 @@ class InventoryMovementServiceTest {
         assertEquals(new BigDecimal("20.000"), response.stockActual());
         verify(itemRepository).save(any(InventoryItem.class));
         verify(movementRepository).save(any(InventoryMovement.class));
+    }
+
+    @Test
+    void createNewItemAndInitialEntryInSelectedGroup() {
+        WorkGroup group = new WorkGroup();
+        group.setId(9L);
+        group.setName("Zona Norte");
+        when(workGroupRepository.findByIdAndDeletedAtIsNull(9L)).thenReturn(Optional.of(group));
+        when(itemRepository.save(any(InventoryItem.class))).thenAnswer(invocation -> {
+            InventoryItem createdItem = invocation.getArgument(0);
+            createdItem.setId(22L);
+            return createdItem;
+        });
+        var authentication = new UsernamePasswordAuthenticationToken(
+                "admin@agrosentinel.test", "not-used", List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+
+        InventoryMovementResponse response = service.registerInitialEntry(
+                new InventoryInitialEntryRequest(
+                        "Filtro de aire", "Filtros", "und",
+                        new BigDecimal("2.000"), new BigDecimal("8.000"), "Compra", 9L),
+                "admin@agrosentinel.test",
+                "ROLE_ADMIN",
+                authentication);
+
+        assertEquals(9L, response.groupId());
+        verify(itemRepository).save(org.mockito.ArgumentMatchers.argThat(
+                savedItem -> savedItem.getWorkGroup() != null
+                        && savedItem.getWorkGroup().getId().equals(9L)));
     }
 }

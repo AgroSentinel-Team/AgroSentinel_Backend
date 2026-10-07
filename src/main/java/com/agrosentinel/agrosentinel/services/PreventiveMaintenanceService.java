@@ -47,7 +47,7 @@ public class PreventiveMaintenanceService {
     private final UserRoleService userRoleService;
 
     public List<PreventiveMaintenanceResponse> findAll(Authentication authentication) {
-        List<PreventiveMaintenance> maintenances = isAdministrator(authentication)
+        List<PreventiveMaintenance> maintenances = isAdministrator(authentication) || isSupervisor(authentication)
                 ? maintenanceRepository.findAllByOrderByScheduledAtAsc()
                 : maintenanceRepository.findAllByTechnician_EmailOrderByScheduledAtAsc(authentication.getName());
         return maintenances.stream().map(this::toResponse).toList();
@@ -95,7 +95,7 @@ public class PreventiveMaintenanceService {
             List<MultipartFile> evidenceFiles,
             Authentication authentication) {
         PreventiveMaintenance maintenance = requireVisibleMaintenance(id, authentication);
-        if (isAdministrator(authentication)) {
+        if (isAdministrator(authentication) || isSupervisor(authentication)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "La ejecución debe registrarla el técnico asignado");
         }
         if (maintenance.getStatus() != PreventiveMaintenanceStatus.SCHEDULED) {
@@ -215,7 +215,9 @@ public class PreventiveMaintenanceService {
     private PreventiveMaintenance requireVisibleMaintenance(Long id, Authentication authentication) {
         PreventiveMaintenance maintenance = maintenanceRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mantenimiento no encontrado"));
-        if (!isAdministrator(authentication) && !maintenance.getTechnician().getEmail().equals(authentication.getName())) {
+        if (!isAdministrator(authentication)
+                && !isSupervisor(authentication)
+                && !maintenance.getTechnician().getEmail().equals(authentication.getName())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Este mantenimiento no está asignado a tu usuario");
         }
         return maintenance;
@@ -225,6 +227,12 @@ public class PreventiveMaintenanceService {
         return authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .anyMatch(authority -> authority.equals("ROLE_ADMIN") || authority.equals("ROLE_ADMINISTRADOR"));
+    }
+
+    private boolean isSupervisor(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(authority -> authority.equals("ROLE_SUPERVISOR"));
     }
 
     private PreventiveMaintenanceStatus toStatus(MaintenanceOutcome outcome) {

@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,6 +34,16 @@ public class AssetController {
     @GetMapping
     public List<AssetResponse> findAll() {
         return assetService.findAll();
+    }
+
+    @GetMapping("/assigned")
+    public List<AssetResponse> findAssignedToCurrentUser(Authentication authentication) {
+        return assetService.findAssignedToUser(authentication.getName());
+    }
+
+    @GetMapping("/assigned/{id}/resume")
+    public AssetResumeResponse getAssignedResume(@PathVariable Long id, Authentication authentication) {
+        return assetService.getAssignedResume(id, authentication.getName());
     }
 
     @PostMapping

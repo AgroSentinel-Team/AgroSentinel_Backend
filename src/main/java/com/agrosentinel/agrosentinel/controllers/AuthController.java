@@ -86,6 +86,7 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Usuario autenticado no disponible");
         }
         return ResponseEntity.ok(Map.of(
+                "id", usuario.getId(),
                 "nombre", usuario.getNombre(),
                 "email", usuario.getEmail(),
                 "rol", usuario.getRol(),

@@ -3,8 +3,10 @@ package com.agrosentinel.agrosentinel.services;
 import java.util.Comparator;
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.agrosentinel.agrosentinel.dtos.CategoryRequest;
 import com.agrosentinel.agrosentinel.dtos.CategoryResponse;
@@ -29,8 +31,12 @@ public class CategoryService {
 
     @Transactional
     public CategoryResponse create(CategoryRequest request) {
+        String name = request.name().trim();
+        if (categoryRepository.existsByNameIgnoreCase(name)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya existe una categoría con ese nombre");
+        }
         Category category = new Category();
-        category.setName(request.name().trim());
+        category.setName(name);
         category.setDescription(request.description());
         if (request.maintenanceFrequencyDays() != null) {
             category.setMaintenanceFrequencyDays(request.maintenanceFrequencyDays());

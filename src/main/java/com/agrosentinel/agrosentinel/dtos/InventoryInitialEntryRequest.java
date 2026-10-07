@@ -14,5 +14,6 @@ public record InventoryInitialEntryRequest(
         @NotBlank @Size(max = 30) String unit,
         @NotNull @DecimalMin("0") @Digits(integer = 11, fraction = 3) BigDecimal minimum,
         @NotNull @DecimalMin(value = "0", inclusive = false) @Digits(integer = 11, fraction = 3) BigDecimal cantidad,
-        @Size(max = 2000) String motivo) {
+        @Size(max = 2000) String motivo,
+        Long groupId) {
 }

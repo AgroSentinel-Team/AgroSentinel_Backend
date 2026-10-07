@@ -38,6 +38,30 @@ import org.springframework.security.core.Authentication;
 
 class FailureReportServiceTest {
     @Test
+    void supervisorCanReadAllFailureReports() {
+        FailureReportRepository reportRepository = mock(FailureReportRepository.class);
+        UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
+        UserRoleService userRoleService = mock(UserRoleService.class);
+        Usuario supervisor = user(12L, "supervisor@example.com", "SUPERVISOR");
+        when(usuarioRepository.findByEmail(supervisor.getEmail())).thenReturn(supervisor);
+        when(userRoleService.getEffectiveRoles(supervisor)).thenReturn(Set.of("SUPERVISOR"));
+        when(reportRepository.findAllByOrderByFechaReporteDesc()).thenReturn(List.of());
+
+        FailureReportService service = new FailureReportService(
+                reportRepository,
+                mock(AssetRepository.class),
+                usuarioRepository,
+                mock(WorkGroupRepository.class),
+                mock(MaintenanceHistoryRepository.class),
+                mock(FailureEvidenceStorageService.class),
+                userRoleService,
+                mock(AssetService.class));
+
+        assertEquals(List.of(), service.findAll(authentication(supervisor.getEmail(), "ROLE_SUPERVISOR")));
+        verify(reportRepository).findAllByOrderByFechaReporteDesc();
+    }
+
+    @Test
     void onlyHighAndCriticalPriorityMoveAssetToRepair() {
         FailureReportRepository reportRepository = mock(FailureReportRepository.class);
         AssetRepository assetRepository = mock(AssetRepository.class);

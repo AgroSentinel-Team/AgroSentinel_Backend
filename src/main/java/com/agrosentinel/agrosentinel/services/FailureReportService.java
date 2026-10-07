@@ -58,7 +58,7 @@ public class FailureReportService {
 
     public List<FailureReportResponse> findAll(Authentication authentication) {
         Usuario currentUser = requireActiveUser(authentication.getName());
-        if (isAdministrator(authentication)) {
+        if (isAdministrator(authentication) || hasRole(currentUser, "SUPERVISOR")) {
             return failureReportRepository.findAllByOrderByFechaReporteDesc().stream()
                     .map(this::toResponse)
                     .toList();
@@ -311,6 +311,9 @@ public class FailureReportService {
             return report;
         }
         Usuario currentUser = requireActiveUser(authentication.getName());
+        if (hasRole(currentUser, "SUPERVISOR")) {
+            return report;
+        }
         boolean isReporter = report.getUser().getId().equals(currentUser.getId());
         boolean isAssignedTechnician = report.getAssignedTechnician() != null
                 && report.getAssignedTechnician().getId().equals(currentUser.getId());

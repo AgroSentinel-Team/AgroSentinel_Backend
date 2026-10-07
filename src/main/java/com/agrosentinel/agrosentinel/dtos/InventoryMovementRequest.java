@@ -12,5 +12,11 @@ import jakarta.validation.constraints.Size;
 public record InventoryMovementRequest(
         @NotNull InventoryMovementType tipo,
         @NotNull @DecimalMin(value = "0", inclusive = false) @Digits(integer = 11, fraction = 3) BigDecimal cantidad,
-        @Size(max = 2000) String motivo) {
+        @Size(max = 2000) String motivo,
+        Long groupId,
+        Boolean central) {
+    public InventoryMovementRequest(
+            InventoryMovementType tipo, BigDecimal cantidad, String motivo) {
+        this(tipo, cantidad, motivo, null, null);
+    }
 }

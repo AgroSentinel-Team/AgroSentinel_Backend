@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,8 +31,11 @@ public class InventoryMovementController {
     private final InventoryMovementService movementService;
 
     @GetMapping("/items")
-    public List<InventoryItemResponse> findAllItems() {
-        return movementService.findAllItems();
+    public List<InventoryItemResponse> findAllItems(
+            @RequestParam(required = false) Long groupId,
+            @RequestParam(defaultValue = "false") boolean central,
+            Authentication authentication) {
+        return movementService.findItems(groupId, central, authentication);
     }
 
     @PostMapping("/entries/new-item")
@@ -40,7 +44,7 @@ public class InventoryMovementController {
             @Valid @RequestBody InventoryInitialEntryRequest request,
             Authentication authentication) {
         String role = getInventoryRole(authentication);
-        return movementService.registerInitialEntry(request, authentication.getName(), role);
+        return movementService.registerInitialEntry(request, authentication.getName(), role, authentication);
     }
 
     @PostMapping("/{id}/movements")
@@ -52,7 +56,7 @@ public class InventoryMovementController {
         String role = getInventoryRole(authentication);
 
         return movementService.registerMovement(
-                id, request, authentication.getName(), role);
+                id, request, authentication.getName(), role, authentication);
     }
 
     private String getInventoryRole(Authentication authentication) {
@@ -67,7 +71,10 @@ public class InventoryMovementController {
     }
 
     @GetMapping("/movements")
-    public List<InventoryMovementResponse> findAllMovements() {
-        return movementService.findAllMovements();
+    public List<InventoryMovementResponse> findAllMovements(
+            @RequestParam(required = false) Long groupId,
+            @RequestParam(defaultValue = "false") boolean central,
+            Authentication authentication) {
+        return movementService.findMovements(groupId, central, authentication);
     }
 }

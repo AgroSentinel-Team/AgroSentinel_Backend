@@ -16,5 +16,7 @@ public record InventoryMovementResponse(
         String rol,
         String motivo,
         Instant fecha,
-        BigDecimal stockActual) {
+        BigDecimal stockActual,
+        Long groupId,
+        String groupName) {
 }

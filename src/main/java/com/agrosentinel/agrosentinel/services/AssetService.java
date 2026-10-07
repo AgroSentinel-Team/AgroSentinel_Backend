@@ -43,6 +43,28 @@ public class AssetService {
         return assetRepository.findAll().stream().map(this::toResponse).toList();
     }
 
+    public List<AssetResponse> findAssignedToUser(String email) {
+        return assetRepository.findAll().stream()
+                .filter(Asset::isActive)
+                .filter(asset -> email.equalsIgnoreCase(asset.getResponsible().getEmail()))
+                .map(this::toResponse)
+                .toList();
+    }
+
+    public AssetResumeResponse getAssignedResume(Long id, String email) {
+        Asset asset = findAsset(id);
+        if (!asset.isActive() || !email.equalsIgnoreCase(asset.getResponsible().getEmail())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo puedes consultar la hoja de vida de maquinaria asignada a tu usuario");
+        }
+        ensureScheduledPreventiveHistory(asset);
+        List<MaintenanceHistoryResponse> history = maintenanceHistoryRepository
+                .findAllByAssetIdOrderByMaintenanceDateDesc(id)
+                .stream()
+                .map(this::toHistoryResponse)
+                .toList();
+        return new AssetResumeResponse(toResponse(asset), history);
+    }
+
     @Transactional
     public AssetResponse create(AssetRequest request) {
         Asset asset = new Asset();

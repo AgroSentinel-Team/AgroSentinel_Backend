@@ -1,6 +1,7 @@
 package com.agrosentinel.agrosentinel.services;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.mock;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.agrosentinel.agrosentinel.dtos.PreventiveMaintenanceCreateRequest;
 import com.agrosentinel.agrosentinel.dtos.PreventiveMaintenanceExecutionRequest;
@@ -35,6 +37,43 @@ import com.agrosentinel.agrosentinel.repositories.PreventiveMaintenanceRepositor
 import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
 
 class PreventiveMaintenanceServiceTest {
+    @Test
+    void supervisorCanReadAllPreventiveMaintenances() {
+        PreventiveMaintenanceRepository maintenanceRepository = mock(PreventiveMaintenanceRepository.class);
+        when(maintenanceRepository.findAllByOrderByScheduledAtAsc()).thenReturn(List.of());
+        PreventiveMaintenanceService service = service(
+                maintenanceRepository,
+                mock(AssetRepository.class),
+                mock(UsuarioRepository.class),
+                mock(MaintenanceHistoryRepository.class),
+                mock(PreventiveMaintenanceEvidenceStorageService.class));
+
+        assertEquals(List.of(), service.findAll(authentication("supervisor@example.com", "ROLE_SUPERVISOR")));
+        org.mockito.Mockito.verify(maintenanceRepository).findAllByOrderByScheduledAtAsc();
+    }
+
+    @Test
+    void supervisorCannotSchedulePreventiveMaintenance() {
+        PreventiveMaintenanceRepository maintenanceRepository = mock(PreventiveMaintenanceRepository.class);
+        PreventiveMaintenanceService service = service(
+                maintenanceRepository,
+                mock(AssetRepository.class),
+                mock(UsuarioRepository.class),
+                mock(MaintenanceHistoryRepository.class),
+                mock(PreventiveMaintenanceEvidenceStorageService.class));
+
+        assertThrows(ResponseStatusException.class, () -> service.schedule(
+                new PreventiveMaintenanceCreateRequest(
+                        7L,
+                        3L,
+                        LocalDateTime.of(2026, 11, 1, 9, 30),
+                        MaintenanceAttentionIndex.LOW,
+                        null),
+                authentication("supervisor@example.com", "ROLE_SUPERVISOR")));
+        org.mockito.Mockito.verify(maintenanceRepository, org.mockito.Mockito.never())
+                .save(any(PreventiveMaintenance.class));
+    }
+
     @Test
     void scheduleCreatesLinkedHistoryEntryWithScheduledStatus() {
         PreventiveMaintenanceRepository maintenanceRepository = mock(PreventiveMaintenanceRepository.class);
