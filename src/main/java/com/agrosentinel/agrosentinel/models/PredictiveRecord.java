@@ -72,6 +72,15 @@ public class PredictiveRecord {
     @Column(name = "affected_components", nullable = false, columnDefinition = "text")
     private String affectedComponents;
 
+    @Column(name = "tendencia_lstm", length = 120)
+    private String tendenciaLstm;
+
+    @Column(name = "confianza_lstm", columnDefinition = "double precision")
+    private Double confianzaLstm;
+
+    @Column(name = "razon_confianza", columnDefinition = "text")
+    private String razonConfianza;
+
     @PrePersist
     private void applyTimestamp() {
         if (timestamp == null) {

@@ -18,5 +18,8 @@ public record PredictiveRecordResponse(
         String fallaRealConfirmada,
         String motorState,
         double confidence,
-        String affectedComponents) {
+        String affectedComponents,
+        String tendenciaLstm,
+        Double confianzaLstm,
+        String razonConfianza) {
 }

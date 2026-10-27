@@ -65,6 +65,9 @@ public class PredictiveService {
         record.setMotorState(request.motorState());
         record.setConfidence(request.confidence());
         record.setAffectedComponents(request.affectedComponents());
+        record.setTendenciaLstm(request.tendenciaLstm());
+        record.setConfianzaLstm(request.confianzaLstm());
+        record.setRazonConfianza(request.razonConfianza());
         return toResponse(predictiveRecordRepository.save(record));
     }
 
@@ -136,6 +139,7 @@ public class PredictiveService {
                 record.getTemperature(), record.getVibration(), record.getHumidity(), record.getPressure(),
                 record.getEnergyConsumption(), record.getMachineStatus(), record.getPredictionClass(),
                 record.getTipoFallaPredicha(), record.getFallaRealConfirmada(), record.getMotorState(),
-                record.getConfidence(), record.getAffectedComponents());
+                record.getConfidence(), record.getAffectedComponents(), record.getTendenciaLstm(),
+                record.getConfianzaLstm(), record.getRazonConfianza());
     }
 }
