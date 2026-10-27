@@ -49,7 +49,7 @@ public class SecurityConfig {
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "ALMACENISTA")
                 .requestMatchers("/api/inventory/**")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "ALMACENISTA")
-                .requestMatchers(HttpMethod.POST, "/api/predictive/records").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/predictive/records", "/api/predictive/records/**").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/api/predictive/records/*/feedback")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
                 .requestMatchers(HttpMethod.GET, "/api/assets/assigned", "/api/assets/assigned/**")

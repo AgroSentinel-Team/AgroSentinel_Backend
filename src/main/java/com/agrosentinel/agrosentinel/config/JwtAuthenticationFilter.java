@@ -2,6 +2,7 @@ package com.agrosentinel.agrosentinel.config;
 
 import java.io.IOException;
 
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -31,6 +32,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.jwtService = jwtService;
         this.usuarioRepository = usuarioRepository;
         this.userRoleService = userRoleService;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return HttpMethod.POST.matches(request.getMethod())
+                && ("/api/predictive/records".equals(path)
+                        || path.startsWith("/api/predictive/records/"));
     }
 
     @Override
