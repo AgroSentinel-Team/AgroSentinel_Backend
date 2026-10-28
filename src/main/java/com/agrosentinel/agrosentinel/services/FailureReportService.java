@@ -2,16 +2,19 @@ package com.agrosentinel.agrosentinel.services;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -28,6 +31,11 @@ import com.agrosentinel.agrosentinel.models.EquipmentFinalState;
 import com.agrosentinel.agrosentinel.models.FailurePriority;
 import com.agrosentinel.agrosentinel.models.FailureReport;
 import com.agrosentinel.agrosentinel.models.FailureStatus;
+import com.agrosentinel.agrosentinel.models.InventoryItem;
+import com.agrosentinel.agrosentinel.models.InventoryMovement;
+import com.agrosentinel.agrosentinel.models.InventoryMovementType;
+import com.agrosentinel.agrosentinel.repositories.InventoryItemRepository;
+import com.agrosentinel.agrosentinel.repositories.InventoryMovementRepository;
 import com.agrosentinel.agrosentinel.models.MaintenanceHistory;
 import com.agrosentinel.agrosentinel.models.MaintenanceHistoryStatus;
 import com.agrosentinel.agrosentinel.models.MaintenancePart;
@@ -44,7 +52,6 @@ import com.agrosentinel.agrosentinel.repositories.WorkGroupRepository;
 import lombok.RequiredArgsConstructor;
 
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class FailureReportService {
     private final FailureReportRepository failureReportRepository;
@@ -55,6 +62,45 @@ public class FailureReportService {
     private final FailureEvidenceStorageService evidenceStorageService;
     private final UserRoleService userRoleService;
     private final AssetService assetService;
+    private final InventoryItemRepository inventoryItemRepository;
+    private final InventoryMovementRepository inventoryMovementRepository;
+
+    @Autowired
+    public FailureReportService(
+            FailureReportRepository failureReportRepository,
+            AssetRepository assetRepository,
+            UsuarioRepository usuarioRepository,
+            WorkGroupRepository workGroupRepository,
+            MaintenanceHistoryRepository maintenanceHistoryRepository,
+            FailureEvidenceStorageService evidenceStorageService,
+            UserRoleService userRoleService,
+            AssetService assetService,
+            InventoryItemRepository inventoryItemRepository,
+            InventoryMovementRepository inventoryMovementRepository) {
+        this.failureReportRepository = failureReportRepository;
+        this.assetRepository = assetRepository;
+        this.usuarioRepository = usuarioRepository;
+        this.workGroupRepository = workGroupRepository;
+        this.maintenanceHistoryRepository = maintenanceHistoryRepository;
+        this.evidenceStorageService = evidenceStorageService;
+        this.userRoleService = userRoleService;
+        this.assetService = assetService;
+        this.inventoryItemRepository = inventoryItemRepository;
+        this.inventoryMovementRepository = inventoryMovementRepository;
+    }
+
+    public FailureReportService(
+            FailureReportRepository failureReportRepository,
+            AssetRepository assetRepository,
+            UsuarioRepository usuarioRepository,
+            WorkGroupRepository workGroupRepository,
+            MaintenanceHistoryRepository maintenanceHistoryRepository,
+            FailureEvidenceStorageService evidenceStorageService,
+            UserRoleService userRoleService,
+            AssetService assetService) {
+        this(failureReportRepository, assetRepository, usuarioRepository, workGroupRepository,
+                maintenanceHistoryRepository, evidenceStorageService, userRoleService, assetService, null, null);
+    }
 
     public List<FailureReportResponse> findAll(Authentication authentication) {
         Usuario currentUser = requireActiveUser(authentication.getName());
@@ -123,14 +169,22 @@ public class FailureReportService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede reportar un activo inactivo");
         }
         Usuario reporter = requireActiveUser(authentication.getName());
+        boolean canSelectTechnician = isAdministrator(authentication) || hasRole(reporter, "SUPERVISOR");
         if (!isAdministrator(authentication)
                 && !hasRole(reporter, "TECNICO")
+                && !hasRole(reporter, "SUPERVISOR")
                 && !hasRole(reporter, "OPERATIVO_CAMPO")
                 && !hasRole(reporter, "OPERARIO_CAMPO")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tu rol no puede reportar fallas");
         }
         WorkGroup group = resolveGroup(request.groupId(), reporter, authentication);
-        Usuario technician = chooseTechnician(group);
+        if (request.assignedTechnicianId() != null && !canSelectTechnician) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "Solo administradores y supervisores pueden elegir al técnico");
+        }
+        Usuario technician = request.assignedTechnicianId() == null
+                ? chooseTechnician(group)
+                : chooseTechnician(group, request.assignedTechnicianId());
 
         FailureReport report = new FailureReport();
         report.setAsset(asset);
@@ -234,23 +288,87 @@ public class FailureReportService {
         history.setStatus(request.finalEquipmentState() == EquipmentFinalState.INOPERATIVE_WAITING_PART
                 ? MaintenanceHistoryStatus.PARTIALLY_COMPLETED
                 : MaintenanceHistoryStatus.COMPLETED);
-        history.setParts(request.replacedParts().stream()
+        List<MaintenancePartRequest> resolvedParts = new ArrayList<>();
+        if (request.replacedParts() != null && !request.replacedParts().isEmpty()) {
+            for (MaintenancePartRequest partReq : request.replacedParts()) {
+                if (partReq.itemId() != null && inventoryItemRepository != null) {
+                    InventoryItem item = inventoryItemRepository.findByIdForUpdate(partReq.itemId())
+                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                                    "Repuesto no encontrado en inventario (ID: " + partReq.itemId() + ")"));
+                    Long itemGroupId = item.getWorkGroup() == null ? null : item.getWorkGroup().getId();
+                    if (!Objects.equals(itemGroupId, partReq.sourceGroupId())) {
+                        throw new ResponseStatusException(
+                                HttpStatus.BAD_REQUEST, "El repuesto no pertenece a la bodega seleccionada");
+                    }
+                    String itemOrigin = item.getWorkGroup() == null
+                            ? "Bodega Central"
+                            : item.getWorkGroup().getName();
+                    java.math.BigDecimal available = item.getStock() == null ? java.math.BigDecimal.ZERO : item.getStock();
+                    if (partReq.quantity().compareTo(available) > 0) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                "Stock insuficiente para el repuesto \"" + item.getName() +
+                                "\". Disponible: " + available + " " + item.getUnit() +
+                                ", Requerido: " + partReq.quantity() + " " + item.getUnit());
+                    }
+                    item.setStock(available.subtract(partReq.quantity()));
+                    inventoryItemRepository.save(item);
+
+                    if (inventoryMovementRepository != null) {
+                        InventoryMovement movement = new InventoryMovement();
+                        movement.setItem(item);
+                        movement.setTipo(InventoryMovementType.SALIDA);
+                        movement.setCantidad(partReq.quantity());
+                        movement.setResponsable(request.technicianName().trim());
+                        movement.setRol("tecnico");
+                        String origin = item.getWorkGroup() != null
+                                ? " (" + item.getWorkGroup().getName() + ")"
+                                : " (Bodega Central)";
+                        movement.setMotivo("Uso en intervención técnica de falla F-" + report.getId() + " - " + report.getAsset().getName() + origin);
+
+                        inventoryMovementRepository.save(movement);
+                    }
+                    resolvedParts.add(new MaintenancePartRequest(
+                            item.getCategory(),
+                            item.getName(),
+                            partReq.brand(),
+                            partReq.quantity(),
+                            item.getId(),
+                            itemGroupId,
+                            itemOrigin));
+                } else {
+                    resolvedParts.add(partReq);
+                }
+            }
+        }
+        List<MaintenancePartRequest> replacedParts = resolvedParts;
+        history.setParts(replacedParts.stream()
                 .map(this::toMaintenancePart)
                 .collect(Collectors.toCollection(java.util.ArrayList::new)));
-        history.setReplacedParts(request.replacedParts().stream()
-                .map(part -> part.partNumber().trim() + " - " + part.name().trim()
-                        + (part.brand() == null || part.brand().isBlank() ? "" : " (" + part.brand().trim() + ")")
-                        + " x " + part.quantity().stripTrailingZeros().toPlainString())
+        history.setReplacedParts(replacedParts.stream()
+                .map(part -> {
+                    String origin = part.sourceZoneName() == null || part.sourceZoneName().isBlank()
+                            ? ""
+                            : " [" + part.sourceZoneName().trim() + "]";
+                    String brandStr = part.brand() != null && !part.brand().isBlank()
+                            ? " (" + part.brand().trim() + ")"
+                            : "";
+                    String partNum = part.partNumber() != null ? part.partNumber().trim() : "REP-" + part.itemId();
+                    String partNm = part.name() != null ? part.name().trim() : "Repuesto";
+                    String qtyStr = part.quantity() != null ? part.quantity().stripTrailingZeros().toPlainString() : "1";
+                    return partNum + " - " + partNm
+                            + brandStr + origin
+                            + " x " + qtyStr;
+                })
                 .collect(Collectors.joining("; ")));
         history.setSignedAt(executedAt);
     }
 
     private MaintenancePart toMaintenancePart(MaintenancePartRequest request) {
         MaintenancePart part = new MaintenancePart();
-        part.setPartNumber(request.partNumber().trim());
-        part.setName(request.name().trim());
+        part.setPartNumber(request.partNumber() != null ? request.partNumber().trim() : "REP-" + request.itemId());
+        part.setName(request.name() != null ? request.name().trim() : "Repuesto");
         part.setBrand(normalizeOptional(request.brand()));
-        part.setQuantity(request.quantity());
+        part.setQuantity(request.quantity() != null ? request.quantity() : java.math.BigDecimal.ONE);
         return part;
     }
 
@@ -302,6 +420,16 @@ public class FailureReportService {
         group.setLastAssignedTechnicianId(selected.getId());
         workGroupRepository.save(group);
         return selected;
+    }
+
+    private Usuario chooseTechnician(WorkGroup group, Long requestedTechnicianId) {
+        return group.getMembers().stream()
+                .filter(user -> user.getId().equals(requestedTechnicianId))
+                .filter(user -> !Boolean.FALSE.equals(user.getActivo()) && hasRole(user, "TECNICO"))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "El técnico seleccionado debe estar activo y pertenecer al grupo con rol de técnico"));
     }
 
     private FailureReport requireVisibleReport(Long id, Authentication authentication) {

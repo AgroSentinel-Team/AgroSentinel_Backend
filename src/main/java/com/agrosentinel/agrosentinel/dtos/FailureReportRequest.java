@@ -11,5 +11,6 @@ public record FailureReportRequest(
         @NotBlank @Size(max = 120) String tipoFalla,
         @NotNull FailurePriority prioridad,
         @NotBlank @Size(max = 5000) String descripcion,
-        Long groupId) {
+        Long groupId,
+        Long assignedTechnicianId) {
 }

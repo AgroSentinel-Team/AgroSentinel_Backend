@@ -3,6 +3,7 @@ package com.agrosentinel.agrosentinel.controllers;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -35,13 +37,21 @@ public class WorkGroupController {
     }
 
     @GetMapping("/options")
-    public List<WorkGroupResponse> findOptions(Authentication authentication) {
-        boolean isAdministrator = authentication.getAuthorities().stream()
+    public List<WorkGroupResponse> findOptions(
+            @RequestParam(name = "all", defaultValue = "false") boolean all,
+            Authentication authentication) {
+        boolean isAdministrator = authentication != null && authentication.getAuthorities().stream()
                 .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMINISTRADOR")
                         || authority.getAuthority().equals("ROLE_ADMIN"));
-        return isAdministrator
+        boolean isTechnician = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_TECNICO"));
+        if (all && !isAdministrator && !isTechnician) {
+            throw new AccessDeniedException("No tienes permiso para consultar todos los grupos");
+        }
+        String username = authentication != null ? authentication.getName() : "";
+        return isAdministrator || (all && isTechnician)
                 ? workGroupService.findAll()
-                : workGroupService.findForMember(authentication.getName());
+                : workGroupService.findForMember(username);
     }
 
     @PostMapping
@@ -67,13 +77,14 @@ public class WorkGroupController {
 
     @PatchMapping("/{id}/roles")
     public WorkGroupResponse updateRoles(
-            @PathVariable Long id, @Valid @RequestBody WorkGroupRolesRequest request) {
+            @PathVariable Long id,
+            @Valid @RequestBody WorkGroupRolesRequest request) {
         return workGroupService.updateRoles(id, request.roles());
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void softDelete(@PathVariable Long id) {
+    public void delete(@PathVariable Long id) {
         workGroupService.softDelete(id);
     }
 }

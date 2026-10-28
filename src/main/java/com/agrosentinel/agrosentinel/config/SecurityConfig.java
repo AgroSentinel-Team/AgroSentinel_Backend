@@ -52,15 +52,18 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/predictive/records", "/api/predictive/records/**").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/api/predictive/records/*/feedback")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
+                .requestMatchers(HttpMethod.GET, "/api/predictive/**")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA",
+                            "OPERATIVO_CAMPO", "OPERARIO_CAMPO")
                 .requestMatchers(HttpMethod.GET, "/api/assets/assigned", "/api/assets/assigned/**")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA",
                             "OPERATIVO_CAMPO", "OPERARIO_CAMPO")
                 .requestMatchers(HttpMethod.GET, "/api/assets")
-                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA")
                 .requestMatchers(HttpMethod.GET, "/api/users")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
                 .requestMatchers(HttpMethod.GET, "/api/assets/*/resume")
-                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA")
                 .requestMatchers("/api/work-groups/options")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA",
                             "OPERATIVO_CAMPO", "OPERARIO_CAMPO")
@@ -75,7 +78,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/maintenance-history/**")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
                 .requestMatchers("/uploads/maintenance-evidence/**")
-                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA")
+                .requestMatchers("/uploads/failure-evidence/**")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA")
                 .requestMatchers("/api/failure-reports", "/api/failure-reports/**")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA",
                             "OPERATIVO_CAMPO", "OPERARIO_CAMPO")

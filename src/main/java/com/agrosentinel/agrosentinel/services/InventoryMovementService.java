@@ -49,7 +49,12 @@ public class InventoryMovementService {
             return itemRepository.findAllByWorkGroupIsNullOrderByNameAsc().stream()
                     .map(this::toItemResponse).toList();
         }
-        requireGroupAccess(groupId, authentication);
+        if (!canViewAnyZone(authentication)) {
+            requireGroupAccess(groupId, authentication);
+        } else {
+            workGroupRepository.findByIdAndDeletedAtIsNull(groupId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Grupo o zona no encontrado"));
+        }
         return itemRepository.findAllByWorkGroup_IdOrderByNameAsc(groupId).stream()
                 .map(this::toItemResponse).toList();
     }
@@ -153,6 +158,10 @@ public class InventoryMovementService {
         List<InventoryMovement> movements;
         if (central) {
             movements = movementRepository.findAllForCentralHistory();
+        } else if (canViewAnyZone(authentication)) {
+            workGroupRepository.findByIdAndDeletedAtIsNull(groupId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Grupo o zona no encontrado"));
+            movements = movementRepository.findAllForGroupHistory(groupId);
         } else {
             requireGroupAccess(groupId, authentication);
             movements = movementRepository.findAllForGroupHistory(groupId);
@@ -162,9 +171,20 @@ public class InventoryMovementService {
                 .toList();
     }
 
+    private boolean canViewAnyZone(Authentication authentication) {
+        return authentication != null && authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(authority -> authority.equals("ROLE_ADMIN") || authority.equals("ROLE_ADMINISTRADOR")
+                        || authority.equals("ROLE_TECNICO") || authority.equals("ROLE_ALMACENISTA")
+                        || authority.equals("ROLE_SUPERVISOR"));
+    }
+
     private WorkGroup requireGroupAccess(Long groupId, Authentication authentication) {
         WorkGroup group = workGroupRepository.findByIdAndDeletedAtIsNull(groupId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Grupo o zona no encontrado"));
+        if (authentication == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No autenticado");
+        }
         boolean administrator = authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .anyMatch(authority -> authority.equals("ROLE_ADMIN") || authority.equals("ROLE_ADMINISTRADOR"));

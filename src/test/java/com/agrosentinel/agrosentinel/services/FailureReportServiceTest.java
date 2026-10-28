@@ -145,6 +145,77 @@ class FailureReportServiceTest {
     }
 
     @Test
+    void supervisorCanSelectAnActiveTechnicianFromTheirGroup() {
+        FailureReportRepository reportRepository = mock(FailureReportRepository.class);
+        AssetRepository assetRepository = mock(AssetRepository.class);
+        UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
+        WorkGroupRepository workGroupRepository = mock(WorkGroupRepository.class);
+        UserRoleService userRoleService = mock(UserRoleService.class);
+        FailureEvidenceStorageService evidenceStorageService = mock(FailureEvidenceStorageService.class);
+        Asset asset = new Asset();
+        asset.setId(7L);
+        asset.setName("Tractor");
+        Usuario supervisor = user(1L, "supervisor@example.com", "SUPERVISOR");
+        Usuario technician = user(2L, "tecnico@example.com", "TECNICO");
+        WorkGroup group = new WorkGroup();
+        group.setId(5L);
+        group.setMembers(Set.of(supervisor, technician));
+
+        when(assetRepository.findById(7L)).thenReturn(Optional.of(asset));
+        when(usuarioRepository.findByEmail(supervisor.getEmail())).thenReturn(supervisor);
+        when(workGroupRepository.findActiveByIdForUpdate(5L)).thenReturn(Optional.of(group));
+        when(userRoleService.getEffectiveRoles(supervisor)).thenReturn(Set.of("SUPERVISOR"));
+        when(userRoleService.getEffectiveRoles(technician)).thenReturn(Set.of("TECNICO"));
+        when(reportRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        FailureReportService service = new FailureReportService(
+                reportRepository, assetRepository, usuarioRepository, workGroupRepository,
+                mock(MaintenanceHistoryRepository.class), evidenceStorageService, userRoleService,
+                mock(AssetService.class));
+
+        var response = service.create(
+                new FailureReportRequest(
+                        7L, "Falla mecánica", FailurePriority.MEDIA, "Descripción de prueba", 5L, 2L),
+                null,
+                authentication(supervisor.getEmail(), "ROLE_SUPERVISOR"));
+
+        assertEquals(2L, response.assignedTechnicianId());
+    }
+
+    @Test
+    void manuallySelectedTechnicianMustBelongToTheSelectedGroup() {
+        FailureReportRepository reportRepository = mock(FailureReportRepository.class);
+        AssetRepository assetRepository = mock(AssetRepository.class);
+        UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
+        WorkGroupRepository workGroupRepository = mock(WorkGroupRepository.class);
+        UserRoleService userRoleService = mock(UserRoleService.class);
+        Usuario supervisor = user(1L, "supervisor@example.com", "SUPERVISOR");
+        WorkGroup group = new WorkGroup();
+        group.setId(5L);
+        group.setMembers(Set.of(supervisor));
+
+        when(assetRepository.findById(7L)).thenReturn(Optional.of(new Asset()));
+        when(usuarioRepository.findByEmail(supervisor.getEmail())).thenReturn(supervisor);
+        when(workGroupRepository.findActiveByIdForUpdate(5L)).thenReturn(Optional.of(group));
+        when(userRoleService.getEffectiveRoles(supervisor)).thenReturn(Set.of("SUPERVISOR"));
+
+        FailureReportService service = new FailureReportService(
+                reportRepository, assetRepository, usuarioRepository, workGroupRepository,
+                mock(MaintenanceHistoryRepository.class), mock(FailureEvidenceStorageService.class),
+                userRoleService, mock(AssetService.class));
+
+        var exception = org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
+                () -> service.create(
+                        new FailureReportRequest(
+                                7L, "Falla mecánica", FailurePriority.MEDIA, "Descripción de prueba", 5L, 2L),
+                        null,
+                        authentication(supervisor.getEmail(), "ROLE_SUPERVISOR")));
+
+        assertEquals(org.springframework.http.HttpStatus.BAD_REQUEST, exception.getStatusCode());
+    }
+
+    @Test
     void interventionIsStoredAndWaitingForPartsKeepsTheAssetInRepair() {
         FailureReportRepository reportRepository = mock(FailureReportRepository.class);
         AssetRepository assetRepository = mock(AssetRepository.class);
@@ -202,7 +273,7 @@ class FailureReportServiceTest {
     }
 
     private FailureReportRequest request(FailurePriority priority) {
-        return new FailureReportRequest(7L, "Falla mecánica", priority, "Descripción de prueba", 5L);
+        return new FailureReportRequest(7L, "Falla mecánica", priority, "Descripción de prueba", 5L, null);
     }
 
     private Usuario user(Long id, String email, String role) {
@@ -217,5 +288,144 @@ class FailureReportServiceTest {
 
     private Authentication authentication(String email, String role) {
         return new UsernamePasswordAuthenticationToken(email, null, Set.of(new SimpleGrantedAuthority(role)));
+    }
+
+    @Test
+    void interventionWithInventoryPartDeductsStockAndCreatesMovement() {
+        FailureReportRepository reportRepository = mock(FailureReportRepository.class);
+        AssetRepository assetRepository = mock(AssetRepository.class);
+        UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
+        WorkGroupRepository workGroupRepository = mock(WorkGroupRepository.class);
+        MaintenanceHistoryRepository historyRepository = mock(MaintenanceHistoryRepository.class);
+        UserRoleService userRoleService = mock(UserRoleService.class);
+        FailureEvidenceStorageService evidenceStorageService = mock(FailureEvidenceStorageService.class);
+        com.agrosentinel.agrosentinel.repositories.InventoryItemRepository inventoryItemRepository = mock(com.agrosentinel.agrosentinel.repositories.InventoryItemRepository.class);
+        com.agrosentinel.agrosentinel.repositories.InventoryMovementRepository inventoryMovementRepository = mock(com.agrosentinel.agrosentinel.repositories.InventoryMovementRepository.class);
+
+        Usuario technician = user(9L, "tecnico@example.com", "TECNICO");
+        Asset asset = new Asset();
+        asset.setId(7L);
+        asset.setName("Tractor");
+        FailureReport report = new FailureReport();
+        report.setId(45L);
+        report.setAsset(asset);
+        report.setUser(technician);
+        report.setAssignedTechnician(technician);
+        report.setFechaReporte(LocalDateTime.parse("2026-10-05T08:00:00"));
+        report.setEstado(FailureStatus.EN_REVISION);
+        report.setFechaInicioRevision(LocalDateTime.parse("2026-10-05T08:30:00"));
+
+        com.agrosentinel.agrosentinel.models.InventoryItem item = new com.agrosentinel.agrosentinel.models.InventoryItem();
+        item.setId(101L);
+        item.setName("Filtro de Aceite");
+        item.setStock(new BigDecimal("10.000"));
+        item.setUnit("und");
+        WorkGroup inventoryGroup = new WorkGroup();
+        inventoryGroup.setId(1L);
+        inventoryGroup.setName("Zona Norte");
+        item.setWorkGroup(inventoryGroup);
+
+        when(reportRepository.findById(45L)).thenReturn(Optional.of(report));
+        when(reportRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(usuarioRepository.findByEmail(technician.getEmail())).thenReturn(technician);
+        when(userRoleService.getEffectiveRoles(technician)).thenReturn(Set.of("TECNICO"));
+        when(historyRepository.findByFailureReportId(45L)).thenReturn(Optional.empty());
+        when(historyRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(inventoryItemRepository.findByIdForUpdate(101L)).thenReturn(Optional.of(item));
+
+        FailureReportService service = new FailureReportService(
+                reportRepository, assetRepository, usuarioRepository, workGroupRepository, historyRepository,
+                evidenceStorageService, userRoleService, mock(AssetService.class),
+                inventoryItemRepository, inventoryMovementRepository);
+
+        FailureInterventionRequest request = new FailureInterventionRequest(
+                "Tractor John Deere",
+                "Fuga de aceite",
+                report.getFechaReporte(),
+                report.getFechaInicioRevision(),
+                "Filtro desgastado",
+                "Uso prolongado",
+                "Reemplazo de filtro",
+                List.of(new MaintenancePartRequest(
+                        "FLT-100", "Filtro de Aceite", "Bosch", new BigDecimal("2.000"), 101L, 1L, "Zona Norte")),
+                30,
+                "Prueba de encendido y presi�n",
+                EquipmentFinalState.OPERATIONAL,
+                "Revisar nivel en 50 horas",
+                null,
+                technician.getNombre(),
+                "Supervisor");
+
+        var response = service.saveIntervention(
+                45L, request, authentication(technician.getEmail(), "ROLE_TECNICO"));
+
+        assertEquals(FailureStatus.RESUELTO, response.estado());
+        assertEquals(new BigDecimal("8.000"), item.getStock());
+        verify(inventoryItemRepository).save(item);
+        verify(inventoryMovementRepository).save(any(com.agrosentinel.agrosentinel.models.InventoryMovement.class));
+    }
+
+    @Test
+    void interventionWithInsufficientStockThrowsBadRequest() {
+        FailureReportRepository reportRepository = mock(FailureReportRepository.class);
+        AssetRepository assetRepository = mock(AssetRepository.class);
+        UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
+        WorkGroupRepository workGroupRepository = mock(WorkGroupRepository.class);
+        MaintenanceHistoryRepository historyRepository = mock(MaintenanceHistoryRepository.class);
+        UserRoleService userRoleService = mock(UserRoleService.class);
+        FailureEvidenceStorageService evidenceStorageService = mock(FailureEvidenceStorageService.class);
+        com.agrosentinel.agrosentinel.repositories.InventoryItemRepository inventoryItemRepository = mock(com.agrosentinel.agrosentinel.repositories.InventoryItemRepository.class);
+        com.agrosentinel.agrosentinel.repositories.InventoryMovementRepository inventoryMovementRepository = mock(com.agrosentinel.agrosentinel.repositories.InventoryMovementRepository.class);
+
+        Usuario technician = user(9L, "tecnico@example.com", "TECNICO");
+        Asset asset = new Asset();
+        asset.setId(7L);
+        asset.setName("Tractor");
+        FailureReport report = new FailureReport();
+        report.setId(46L);
+        report.setAsset(asset);
+        report.setUser(technician);
+        report.setAssignedTechnician(technician);
+        report.setFechaReporte(LocalDateTime.parse("2026-10-05T08:00:00"));
+        report.setEstado(FailureStatus.EN_REVISION);
+        report.setFechaInicioRevision(LocalDateTime.parse("2026-10-05T08:30:00"));
+
+        com.agrosentinel.agrosentinel.models.InventoryItem item = new com.agrosentinel.agrosentinel.models.InventoryItem();
+        item.setId(102L);
+        item.setName("Filtro de Aire");
+        item.setStock(new BigDecimal("1.000"));
+        item.setUnit("und");
+
+        when(reportRepository.findById(46L)).thenReturn(Optional.of(report));
+        when(usuarioRepository.findByEmail(technician.getEmail())).thenReturn(technician);
+        when(userRoleService.getEffectiveRoles(technician)).thenReturn(Set.of("TECNICO"));
+        when(inventoryItemRepository.findByIdForUpdate(102L)).thenReturn(Optional.of(item));
+
+        FailureReportService service = new FailureReportService(
+                reportRepository, assetRepository, usuarioRepository, workGroupRepository, historyRepository,
+                evidenceStorageService, userRoleService, mock(AssetService.class),
+                inventoryItemRepository, inventoryMovementRepository);
+
+        FailureInterventionRequest request = new FailureInterventionRequest(
+                "Tractor John Deere",
+                "Filtro obstruido",
+                report.getFechaReporte(),
+                report.getFechaInicioRevision(),
+                "Filtro saturado",
+                "Polvo excesivo",
+                "Cambio de filtro",
+                List.of(new MaintenancePartRequest(
+                        "AIR-10", "Filtro de Aire", "Donaldson", new BigDecimal("5.000"), 102L, null, "Bodega Central")),
+                20,
+                "Prueba de flujo",
+                EquipmentFinalState.OPERATIONAL,
+                "Monitorear",
+                null,
+                technician.getNombre(),
+                "Supervisor");
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
+                () -> service.saveIntervention(46L, request, authentication(technician.getEmail(), "ROLE_TECNICO")));
     }
 }

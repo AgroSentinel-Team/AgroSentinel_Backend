@@ -23,4 +23,16 @@ class UserRoleServiceTest {
         assertEquals(Set.of("OPERATIVO_CAMPO", "TECNICO"),
                 new UserRoleService(workGroupRepository).getEffectiveRoles(user));
     }
+
+    @Test
+    void normalizesRolePrefixAndCaseBeforeReturningAuthorities() {
+        WorkGroupRepository workGroupRepository = mock(WorkGroupRepository.class);
+        Usuario user = new Usuario();
+        user.setId(13L);
+        user.setRol("role_operativo_campo");
+        when(workGroupRepository.findActiveGrantedRolesByMemberId(13L)).thenReturn(Set.of("role_tecnico"));
+
+        assertEquals(Set.of("OPERATIVO_CAMPO", "TECNICO"),
+                new UserRoleService(workGroupRepository).getEffectiveRoles(user));
+    }
 }
