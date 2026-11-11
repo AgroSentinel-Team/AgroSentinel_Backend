@@ -6,9 +6,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -20,7 +20,9 @@ import com.agrosentinel.agrosentinel.dtos.FailureAssetOption;
 import com.agrosentinel.agrosentinel.dtos.FailureInterventionRequest;
 import com.agrosentinel.agrosentinel.dtos.FailureReportRequest;
 import com.agrosentinel.agrosentinel.dtos.FailureReportResponse;
+import com.agrosentinel.agrosentinel.dtos.FailureReportCloseRequest;
 import com.agrosentinel.agrosentinel.dtos.AssetResumeResponse;
+import com.agrosentinel.agrosentinel.dtos.MaintenanceHistoryResponse;
 import com.agrosentinel.agrosentinel.services.FailureReportService;
 
 import jakarta.validation.Valid;
@@ -47,6 +49,11 @@ public class FailureReportController {
         return failureReportService.findById(id, authentication);
     }
 
+    @GetMapping("/{id}/intervention")
+    public MaintenanceHistoryResponse getIntervention(@PathVariable Long id, Authentication authentication) {
+        return failureReportService.getIntervention(id, authentication);
+    }
+
     @GetMapping("/{id}/asset")
     public AssetResumeResponse getAssignedAssetResume(@PathVariable Long id, Authentication authentication) {
         return failureReportService.getAssignedAssetResume(id, authentication);
@@ -71,11 +78,20 @@ public class FailureReportController {
         return failureReportService.startReview(id, authentication);
     }
 
-    @PutMapping("/{id}/intervention")
+    @PutMapping(value = "/{id}/intervention", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public FailureReportResponse saveIntervention(
             @PathVariable Long id,
-            @RequestBody @Valid FailureInterventionRequest request,
+            @RequestPart("data") @Valid FailureInterventionRequest request,
+            @RequestPart(value = "evidencias", required = false) List<MultipartFile> evidences,
             Authentication authentication) {
-        return failureReportService.saveIntervention(id, request, authentication);
+        return failureReportService.saveIntervention(id, request, evidences, authentication);
+    }
+
+    @PostMapping("/{id}/close")
+    public FailureReportResponse closeAfterReview(
+            @PathVariable Long id,
+            @RequestBody @Valid FailureReportCloseRequest request,
+            Authentication authentication) {
+        return failureReportService.closeAfterReview(id, request, authentication);
     }
 }

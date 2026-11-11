@@ -3,6 +3,7 @@ package com.agrosentinel.agrosentinel.controllers;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -14,10 +15,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.agrosentinel.agrosentinel.dtos.AssetRequest;
 import com.agrosentinel.agrosentinel.dtos.AssetResponse;
+import com.agrosentinel.agrosentinel.dtos.AssetFailureTrendResponse;
 import com.agrosentinel.agrosentinel.dtos.AssetResumeResponse;
 import com.agrosentinel.agrosentinel.services.AssetService;
 
@@ -56,6 +60,11 @@ public class AssetController {
         return assetService.update(id, request);
     }
 
+    @PostMapping(value = "/{id}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public AssetResponse updateImage(@PathVariable Long id, @RequestPart("image") MultipartFile image) {
+        return assetService.updateImage(id, image);
+    }
+
     @PatchMapping("/{id}/deactivate")
     public AssetResponse deactivate(@PathVariable Long id) {
         return assetService.deactivate(id);
@@ -70,5 +79,10 @@ public class AssetController {
     @GetMapping("/{id}/resume")
     public AssetResumeResponse getResume(@PathVariable Long id) {
         return assetService.getResume(id);
+    }
+
+    @GetMapping("/{id}/failure-trends")
+    public AssetFailureTrendResponse getFailureTrends(@PathVariable Long id) {
+        return assetService.getFailureTrends(id);
     }
 }

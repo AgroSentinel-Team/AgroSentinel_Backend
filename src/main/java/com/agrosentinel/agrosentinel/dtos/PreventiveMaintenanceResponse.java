@@ -2,6 +2,7 @@ package com.agrosentinel.agrosentinel.dtos;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 
 import com.agrosentinel.agrosentinel.models.MaintenanceAttentionIndex;
@@ -26,5 +27,7 @@ public record PreventiveMaintenanceResponse(
         List<PreventiveMaintenanceTaskResponse> tasks,
         List<String> evidences,
         MaintenanceAttentionIndex attentionIndex,
-        String predictiveContext) {
+        String predictiveContext,
+        BigDecimal currentHorometer,
+        BigDecimal horometerAtExecution) {
 }

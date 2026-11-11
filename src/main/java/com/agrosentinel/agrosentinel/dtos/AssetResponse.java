@@ -2,6 +2,7 @@ package com.agrosentinel.agrosentinel.dtos;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.math.BigDecimal;
 
 import com.agrosentinel.agrosentinel.models.OperationalStatus;
 
@@ -25,5 +26,7 @@ public record AssetResponse(
         OperationalStatus operationalStatus,
         boolean isActive,
         boolean hasMotor,
-        String predictiveId) {
+        String predictiveId,
+        String imageUrl,
+        BigDecimal currentHorometer) {
 }

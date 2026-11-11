@@ -70,6 +70,12 @@ public class Asset {
 
     private String location;
 
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
+
+    @Column(name = "current_horometer", nullable = false, precision = 12, scale = 2)
+    private BigDecimal currentHorometer = BigDecimal.ZERO;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "operational_status", nullable = false)
     private OperationalStatus operationalStatus = OperationalStatus.OPERATIONAL;

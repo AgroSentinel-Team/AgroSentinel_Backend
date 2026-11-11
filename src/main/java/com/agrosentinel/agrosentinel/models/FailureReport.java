@@ -60,6 +60,15 @@ public class FailureReport {
     @Column(name = "fecha_inicio_revision")
     private LocalDateTime fechaInicioRevision;
 
+    @Column(name = "fecha_envio_cierre")
+    private LocalDateTime fechaEnvioCierre;
+
+    @Column(name = "fecha_asignacion")
+    private LocalDateTime fechaAsignacion;
+
+    @Column(name = "fecha_cierre")
+    private LocalDateTime fechaCierre;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private FailureStatus estado;

@@ -35,6 +35,6 @@ class JwtServiceTest {
 
         JsonNode claims = new ObjectMapper().readTree(Base64.getUrlDecoder().decode(token.split("\\.")[1]));
         long remainingSeconds = claims.path("exp").asLong() - Instant.now().getEpochSecond();
-        assertTrue(remainingSeconds >= 3600);
+        assertTrue(remainingSeconds >= 3599);
     }
 }

@@ -1,6 +1,8 @@
 package com.agrosentinel.agrosentinel.services;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
@@ -18,6 +20,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import com.agrosentinel.agrosentinel.dtos.FailureInterventionRequest;
+import com.agrosentinel.agrosentinel.dtos.FailureReportCloseRequest;
 import com.agrosentinel.agrosentinel.dtos.FailureReportRequest;
 import com.agrosentinel.agrosentinel.dtos.MaintenancePartRequest;
 import com.agrosentinel.agrosentinel.models.Asset;
@@ -26,6 +29,7 @@ import com.agrosentinel.agrosentinel.models.FailureReport;
 import com.agrosentinel.agrosentinel.models.FailurePriority;
 import com.agrosentinel.agrosentinel.models.FailureStatus;
 import com.agrosentinel.agrosentinel.models.MaintenanceHistory;
+import com.agrosentinel.agrosentinel.models.MaintenanceHistoryStatus;
 import com.agrosentinel.agrosentinel.models.OperationalStatus;
 import com.agrosentinel.agrosentinel.models.Usuario;
 import com.agrosentinel.agrosentinel.models.WorkGroup;
@@ -85,6 +89,7 @@ class FailureReportServiceTest {
 
         when(assetRepository.findById(anyLong())).thenReturn(Optional.of(asset));
         when(usuarioRepository.findByEmail(user.getEmail())).thenReturn(user);
+        when(usuarioRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(user));
         when(workGroupRepository.findActiveByIdForUpdate(5L)).thenReturn(Optional.of(group));
         when(userRoleService.getEffectiveRoles(user)).thenReturn(Set.of("OPERATIVO_CAMPO", "TECNICO"));
         when(reportRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -106,7 +111,7 @@ class FailureReportServiceTest {
     }
 
     @Test
-    void assignmentsRotateBetweenActiveTechniciansInGroup() {
+    void assignsAutomaticallyToTheAvailableTechnicianWithLowestWorkload() {
         FailureReportRepository reportRepository = mock(FailureReportRepository.class);
         AssetRepository assetRepository = mock(AssetRepository.class);
         UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
@@ -126,10 +131,20 @@ class FailureReportServiceTest {
         group.setGrantedRoles(Set.of());
         when(assetRepository.findById(7L)).thenReturn(Optional.of(asset));
         when(usuarioRepository.findByEmail(reporter.getEmail())).thenReturn(reporter);
+        when(usuarioRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(firstTechnician));
+        when(usuarioRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(secondTechnician));
         when(workGroupRepository.findActiveByIdForUpdate(5L)).thenReturn(Optional.of(group));
         when(userRoleService.getEffectiveRoles(reporter)).thenReturn(Set.of("OPERATIVO_CAMPO"));
         when(userRoleService.getEffectiveRoles(firstTechnician)).thenReturn(Set.of("TECNICO"));
         when(userRoleService.getEffectiveRoles(secondTechnician)).thenReturn(Set.of("TECNICO"));
+        when(reportRepository.countByAssignedTechnicianIdAndEstadoIn(2L, Set.of(
+                FailureStatus.PENDIENTE, FailureStatus.ASIGNADA, FailureStatus.EN_EJECUCION,
+                FailureStatus.EN_CIERRE, FailureStatus.EN_REVISION, FailureStatus.ESPERA_REPUESTO)))
+                .thenReturn(2L);
+        when(reportRepository.countByAssignedTechnicianIdAndEstadoIn(3L, Set.of(
+                FailureStatus.PENDIENTE, FailureStatus.ASIGNADA, FailureStatus.EN_EJECUCION,
+                FailureStatus.EN_CIERRE, FailureStatus.EN_REVISION, FailureStatus.ESPERA_REPUESTO)))
+                .thenReturn(0L);
         when(reportRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         FailureReportService service = new FailureReportService(
                 reportRepository, assetRepository, usuarioRepository, workGroupRepository, historyRepository,
@@ -140,8 +155,48 @@ class FailureReportServiceTest {
         var second = service.create(request(FailurePriority.MEDIA), null,
                 authentication(reporter.getEmail(), "ROLE_OPERATIVO_CAMPO"));
 
-        assertEquals(2L, first.assignedTechnicianId());
+        assertEquals(3L, first.assignedTechnicianId());
         assertEquals(3L, second.assignedTechnicianId());
+    }
+
+    @Test
+    void rejectsManualAssignmentWhenTechnicianReachedCapacity() {
+        FailureReportRepository reportRepository = mock(FailureReportRepository.class);
+        AssetRepository assetRepository = mock(AssetRepository.class);
+        UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
+        WorkGroupRepository workGroupRepository = mock(WorkGroupRepository.class);
+        UserRoleService userRoleService = mock(UserRoleService.class);
+        Usuario supervisor = user(1L, "supervisor@example.com", "SUPERVISOR");
+        Usuario technician = user(2L, "tecnico@example.com", "TECNICO");
+        WorkGroup group = new WorkGroup();
+        group.setId(5L);
+        group.setMembers(Set.of(supervisor, technician));
+
+        when(assetRepository.findById(7L)).thenReturn(Optional.of(new Asset()));
+        when(usuarioRepository.findByEmail(supervisor.getEmail())).thenReturn(supervisor);
+        when(usuarioRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(technician));
+        when(workGroupRepository.findActiveByIdForUpdate(5L)).thenReturn(Optional.of(group));
+        when(userRoleService.getEffectiveRoles(supervisor)).thenReturn(Set.of("SUPERVISOR"));
+        when(userRoleService.getEffectiveRoles(technician)).thenReturn(Set.of("TECNICO"));
+        when(reportRepository.countByAssignedTechnicianIdAndEstadoIn(2L, Set.of(
+                FailureStatus.PENDIENTE, FailureStatus.ASIGNADA, FailureStatus.EN_EJECUCION,
+                FailureStatus.EN_CIERRE, FailureStatus.EN_REVISION, FailureStatus.ESPERA_REPUESTO)))
+                .thenReturn(3L);
+
+        FailureReportService service = new FailureReportService(
+                reportRepository, assetRepository, usuarioRepository, workGroupRepository,
+                mock(MaintenanceHistoryRepository.class), mock(FailureEvidenceStorageService.class),
+                userRoleService, mock(AssetService.class));
+
+        var exception = org.junit.jupiter.api.Assertions.assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
+                () -> service.create(
+                        new FailureReportRequest(
+                                7L, "Falla mecánica", FailurePriority.MEDIA, "Descripción de prueba", 5L, 2L),
+                        null,
+                        authentication(supervisor.getEmail(), "ROLE_SUPERVISOR")));
+
+        assertEquals(org.springframework.http.HttpStatus.CONFLICT, exception.getStatusCode());
     }
 
     @Test
@@ -163,6 +218,7 @@ class FailureReportServiceTest {
 
         when(assetRepository.findById(7L)).thenReturn(Optional.of(asset));
         when(usuarioRepository.findByEmail(supervisor.getEmail())).thenReturn(supervisor);
+        when(usuarioRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(technician));
         when(workGroupRepository.findActiveByIdForUpdate(5L)).thenReturn(Optional.of(group));
         when(userRoleService.getEffectiveRoles(supervisor)).thenReturn(Set.of("SUPERVISOR"));
         when(userRoleService.getEffectiveRoles(technician)).thenReturn(Set.of("TECNICO"));
@@ -236,7 +292,7 @@ class FailureReportServiceTest {
         report.setFechaReporte(LocalDateTime.parse("2026-10-05T08:00:00"));
         report.setEstado(FailureStatus.EN_REVISION);
         report.setFechaInicioRevision(LocalDateTime.parse("2026-10-05T08:30:00"));
-        when(reportRepository.findById(44L)).thenReturn(Optional.of(report));
+        when(reportRepository.findByIdForUpdate(44L)).thenReturn(Optional.of(report));
         when(reportRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(usuarioRepository.findByEmail(technician.getEmail())).thenReturn(technician);
         when(userRoleService.getEffectiveRoles(technician)).thenReturn(Set.of("TECNICO"));
@@ -267,9 +323,63 @@ class FailureReportServiceTest {
         var response = service.saveIntervention(
                 44L, request, authentication(technician.getEmail(), "ROLE_TECNICO"));
 
-        assertEquals(FailureStatus.ESPERA_REPUESTO, response.estado());
+        assertEquals(FailureStatus.EN_CIERRE, response.estado());
+        assertEquals(report.getFechaEnvioCierre(), response.fechaEnvioCierre());
+        assertNull(response.repairDurationMinutes());
         assertEquals(OperationalStatus.IN_REPAIR, asset.getOperationalStatus());
         verify(historyRepository).save(any(MaintenanceHistory.class));
+    }
+
+    @Test
+    void supervisorClosureRecordsTimestampAndRepairDuration() {
+        FailureReportRepository reportRepository = mock(FailureReportRepository.class);
+        MaintenanceHistoryRepository historyRepository = mock(MaintenanceHistoryRepository.class);
+        UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
+        UserRoleService userRoleService = mock(UserRoleService.class);
+        Usuario supervisor = user(13L, "supervisor@example.com", "SUPERVISOR");
+        when(usuarioRepository.findByEmail(supervisor.getEmail())).thenReturn(supervisor);
+        when(userRoleService.getEffectiveRoles(supervisor)).thenReturn(Set.of("SUPERVISOR"));
+
+        Asset asset = new Asset();
+        asset.setId(7L);
+        asset.setName("Tractor");
+        FailureReport report = new FailureReport();
+        report.setId(44L);
+        report.setAsset(asset);
+        report.setUser(supervisor);
+        report.setTipoFalla("Falla mecánica");
+        report.setPrioridad(FailurePriority.ALTA);
+        report.setDescripcion("Prueba");
+        report.setFechaReporte(LocalDateTime.now().minusDays(4));
+        report.setFechaInicioRevision(LocalDateTime.now().minusHours(2));
+        report.setEstado(FailureStatus.EN_CIERRE);
+        when(reportRepository.findByIdForUpdate(44L)).thenReturn(Optional.of(report));
+        when(reportRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        MaintenanceHistory history = new MaintenanceHistory();
+        history.setFinalEquipmentState(EquipmentFinalState.OPERATIONAL);
+        when(historyRepository.findByFailureReportId(44L)).thenReturn(Optional.of(history));
+        when(historyRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        FailureReportService service = new FailureReportService(
+                reportRepository,
+                mock(AssetRepository.class),
+                usuarioRepository,
+                mock(WorkGroupRepository.class),
+                historyRepository,
+                mock(FailureEvidenceStorageService.class),
+                userRoleService,
+                mock(AssetService.class));
+
+        var response = service.closeAfterReview(
+                44L,
+                new FailureReportCloseRequest("Trabajo revisado"),
+                authentication(supervisor.getEmail(), "ROLE_SUPERVISOR"));
+
+        assertEquals(FailureStatus.RESUELTO, response.estado());
+        assertEquals(report.getFechaCierre(), response.fechaCierre());
+        assertTrue(response.repairDurationMinutes() >= 119);
+        assertEquals(MaintenanceHistoryStatus.COMPLETED, history.getStatus());
+        assertEquals(OperationalStatus.OPERATIONAL, asset.getOperationalStatus());
     }
 
     private FailureReportRequest request(FailurePriority priority) {
@@ -308,6 +418,7 @@ class FailureReportServiceTest {
         asset.setName("Tractor");
         FailureReport report = new FailureReport();
         report.setId(45L);
+        asset.setCurrentHorometer(new BigDecimal("100.00"));
         report.setAsset(asset);
         report.setUser(technician);
         report.setAssignedTechnician(technician);
@@ -325,8 +436,9 @@ class FailureReportServiceTest {
         inventoryGroup.setName("Zona Norte");
         item.setWorkGroup(inventoryGroup);
 
-        when(reportRepository.findById(45L)).thenReturn(Optional.of(report));
+        when(reportRepository.findByIdForUpdate(45L)).thenReturn(Optional.of(report));
         when(reportRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(assetRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(asset));
         when(usuarioRepository.findByEmail(technician.getEmail())).thenReturn(technician);
         when(userRoleService.getEffectiveRoles(technician)).thenReturn(Set.of("TECNICO"));
         when(historyRepository.findByFailureReportId(45L)).thenReturn(Optional.empty());
@@ -354,15 +466,18 @@ class FailureReportServiceTest {
                 "Revisar nivel en 50 horas",
                 null,
                 technician.getNombre(),
-                "Supervisor");
+                "Supervisor",
+                new BigDecimal("110.00"));
 
         var response = service.saveIntervention(
                 45L, request, authentication(technician.getEmail(), "ROLE_TECNICO"));
 
-        assertEquals(FailureStatus.RESUELTO, response.estado());
+        assertEquals(FailureStatus.EN_CIERRE, response.estado());
         assertEquals(new BigDecimal("8.000"), item.getStock());
+        assertEquals(new BigDecimal("110.00"), asset.getCurrentHorometer());
         verify(inventoryItemRepository).save(item);
         verify(inventoryMovementRepository).save(any(com.agrosentinel.agrosentinel.models.InventoryMovement.class));
+        verify(assetRepository).findByIdForUpdate(7L);
     }
 
     @Test
@@ -396,7 +511,7 @@ class FailureReportServiceTest {
         item.setStock(new BigDecimal("1.000"));
         item.setUnit("und");
 
-        when(reportRepository.findById(46L)).thenReturn(Optional.of(report));
+        when(reportRepository.findByIdForUpdate(46L)).thenReturn(Optional.of(report));
         when(usuarioRepository.findByEmail(technician.getEmail())).thenReturn(technician);
         when(userRoleService.getEffectiveRoles(technician)).thenReturn(Set.of("TECNICO"));
         when(inventoryItemRepository.findByIdForUpdate(102L)).thenReturn(Optional.of(item));

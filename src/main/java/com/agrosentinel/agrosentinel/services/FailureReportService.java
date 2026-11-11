@@ -1,5 +1,6 @@
 package com.agrosentinel.agrosentinel.services;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -9,6 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
@@ -24,6 +26,8 @@ import com.agrosentinel.agrosentinel.dtos.FailureAssetOption;
 import com.agrosentinel.agrosentinel.dtos.FailureInterventionRequest;
 import com.agrosentinel.agrosentinel.dtos.FailureReportRequest;
 import com.agrosentinel.agrosentinel.dtos.FailureReportResponse;
+import com.agrosentinel.agrosentinel.dtos.FailureReportCloseRequest;
+import com.agrosentinel.agrosentinel.dtos.MaintenanceHistoryResponse;
 import com.agrosentinel.agrosentinel.dtos.AssetResumeResponse;
 import com.agrosentinel.agrosentinel.dtos.MaintenancePartRequest;
 import com.agrosentinel.agrosentinel.models.Asset;
@@ -46,6 +50,7 @@ import com.agrosentinel.agrosentinel.models.WorkGroup;
 import com.agrosentinel.agrosentinel.repositories.AssetRepository;
 import com.agrosentinel.agrosentinel.repositories.FailureReportRepository;
 import com.agrosentinel.agrosentinel.repositories.MaintenanceHistoryRepository;
+import com.agrosentinel.agrosentinel.repositories.PreventiveMaintenanceRepository;
 import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
 import com.agrosentinel.agrosentinel.repositories.WorkGroupRepository;
 
@@ -54,16 +59,28 @@ import lombok.RequiredArgsConstructor;
 @Service
 @Transactional(readOnly = true)
 public class FailureReportService {
+    private static final long TECHNICIAN_WORKLOAD_CAPACITY = 3;
+    private static final Set<FailureStatus> ACTIVE_WORKLOAD_STATUSES = Set.of(
+            FailureStatus.PENDIENTE,
+            FailureStatus.ASIGNADA,
+            FailureStatus.EN_EJECUCION,
+            FailureStatus.EN_CIERRE,
+            FailureStatus.EN_REVISION,
+            FailureStatus.ESPERA_REPUESTO);
+
     private final FailureReportRepository failureReportRepository;
     private final AssetRepository assetRepository;
     private final UsuarioRepository usuarioRepository;
     private final WorkGroupRepository workGroupRepository;
     private final MaintenanceHistoryRepository maintenanceHistoryRepository;
     private final FailureEvidenceStorageService evidenceStorageService;
+    private final PreventiveMaintenanceEvidenceStorageService maintenanceEvidenceStorageService;
     private final UserRoleService userRoleService;
     private final AssetService assetService;
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryMovementRepository inventoryMovementRepository;
+    private final UserNotificationService notificationService;
+    private final PreventiveMaintenanceRepository preventiveMaintenanceRepository;
 
     @Autowired
     public FailureReportService(
@@ -73,20 +90,26 @@ public class FailureReportService {
             WorkGroupRepository workGroupRepository,
             MaintenanceHistoryRepository maintenanceHistoryRepository,
             FailureEvidenceStorageService evidenceStorageService,
+            PreventiveMaintenanceEvidenceStorageService maintenanceEvidenceStorageService,
             UserRoleService userRoleService,
             AssetService assetService,
             InventoryItemRepository inventoryItemRepository,
-            InventoryMovementRepository inventoryMovementRepository) {
+            InventoryMovementRepository inventoryMovementRepository,
+            UserNotificationService notificationService,
+            PreventiveMaintenanceRepository preventiveMaintenanceRepository) {
         this.failureReportRepository = failureReportRepository;
         this.assetRepository = assetRepository;
         this.usuarioRepository = usuarioRepository;
         this.workGroupRepository = workGroupRepository;
         this.maintenanceHistoryRepository = maintenanceHistoryRepository;
         this.evidenceStorageService = evidenceStorageService;
+        this.maintenanceEvidenceStorageService = maintenanceEvidenceStorageService;
         this.userRoleService = userRoleService;
         this.assetService = assetService;
         this.inventoryItemRepository = inventoryItemRepository;
         this.inventoryMovementRepository = inventoryMovementRepository;
+        this.notificationService = notificationService;
+        this.preventiveMaintenanceRepository = preventiveMaintenanceRepository;
     }
 
     public FailureReportService(
@@ -99,7 +122,23 @@ public class FailureReportService {
             UserRoleService userRoleService,
             AssetService assetService) {
         this(failureReportRepository, assetRepository, usuarioRepository, workGroupRepository,
-                maintenanceHistoryRepository, evidenceStorageService, userRoleService, assetService, null, null);
+                maintenanceHistoryRepository, evidenceStorageService, null, userRoleService, assetService, null, null, null, null);
+    }
+
+    public FailureReportService(
+            FailureReportRepository failureReportRepository,
+            AssetRepository assetRepository,
+            UsuarioRepository usuarioRepository,
+            WorkGroupRepository workGroupRepository,
+            MaintenanceHistoryRepository maintenanceHistoryRepository,
+            FailureEvidenceStorageService evidenceStorageService,
+            UserRoleService userRoleService,
+            AssetService assetService,
+            InventoryItemRepository inventoryItemRepository,
+            InventoryMovementRepository inventoryMovementRepository) {
+        this(failureReportRepository, assetRepository, usuarioRepository, workGroupRepository,
+                maintenanceHistoryRepository, evidenceStorageService, null, userRoleService, assetService,
+                inventoryItemRepository, inventoryMovementRepository, null, null);
     }
 
     public List<FailureReportResponse> findAll(Authentication authentication) {
@@ -195,43 +234,64 @@ public class FailureReportService {
         report.setPrioridad(request.prioridad());
         report.setDescripcion(request.descripcion().trim());
         report.setFechaReporte(LocalDateTime.now());
-        report.setEstado(FailureStatus.PENDIENTE);
+        report.setFechaAsignacion(LocalDateTime.now());
+        report.setEstado(FailureStatus.ASIGNADA);
         report.setEvidenciaUrl(evidenceStorageService.store(evidence));
 
         if (request.prioridad() == FailurePriority.ALTA || request.prioridad() == FailurePriority.CRITICA) {
             asset.setOperationalStatus(OperationalStatus.IN_REPAIR);
         }
 
-        return toResponse(failureReportRepository.save(report));
+        FailureReport savedReport = failureReportRepository.save(report);
+        if (notificationService != null) {
+            notificationService.notifyAssignment(
+                    technician,
+                    "Nueva orden correctiva asignada",
+                    "Falla F-" + savedReport.getId() + " del activo " + asset.getName() + ".",
+                    "/tecnico/dashboard");
+        }
+        return toResponse(savedReport);
     }
 
     @Transactional
     public FailureReportResponse startReview(Long id, Authentication authentication) {
         FailureReport report = requireAssignedReport(id, authentication);
-        if (report.getEstado() == FailureStatus.RESUELTO) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "La falla ya fue resuelta");
+        if (report.getEstado() == FailureStatus.EN_EJECUCION) {
+            return toResponse(report);
         }
-        if (report.getFechaInicioRevision() == null) {
-            report.setFechaInicioRevision(LocalDateTime.now());
+        if (report.getEstado() != FailureStatus.ASIGNADA
+                && report.getEstado() != FailureStatus.PENDIENTE
+                && report.getEstado() != FailureStatus.EN_REVISION) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "La orden solo puede iniciar desde el estado Asignada");
         }
-        report.setEstado(FailureStatus.EN_REVISION);
+        LocalDateTime startedAt = LocalDateTime.now();
+        report.setFechaInicioRevision(startedAt);
+        report.setEstado(FailureStatus.EN_EJECUCION);
+        report.getAsset().setOperationalStatus(OperationalStatus.IN_REPAIR);
         return toResponse(failureReportRepository.save(report));
     }
 
     @Transactional
     public FailureReportResponse saveIntervention(
-            Long id, FailureInterventionRequest request, Authentication authentication) {
+            Long id,
+            FailureInterventionRequest request,
+            List<MultipartFile> evidences,
+            Authentication authentication) {
         FailureReport report = requireAssignedReport(id, authentication);
-        if (report.getEstado() == FailureStatus.RESUELTO) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "La falla ya fue resuelta");
+        if (report.getEstado() != FailureStatus.EN_EJECUCION
+                && report.getEstado() != FailureStatus.EN_REVISION) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "La intervención solo puede enviarse cuando la orden está En ejecución");
+        }
+        if (report.getEstado() == FailureStatus.EN_REVISION) {
+            report.getAsset().setOperationalStatus(OperationalStatus.IN_REPAIR);
         }
 
         LocalDateTime now = LocalDateTime.now();
         if (report.getFechaInicioRevision() == null) {
             report.setFechaInicioRevision(now);
         }
-        report.setEstado(FailureStatus.EN_REVISION);
-
         MaintenanceHistory history = maintenanceHistoryRepository.findByFailureReportId(id)
                 .orElseGet(() -> {
                     MaintenanceHistory newHistory = new MaintenanceHistory();
@@ -242,15 +302,66 @@ public class FailureReportService {
                     return newHistory;
                 });
         applyIntervention(history, report, request, now);
-        report.setEstado(request.finalEquipmentState() == EquipmentFinalState.INOPERATIVE_WAITING_PART
-                ? FailureStatus.ESPERA_REPUESTO
-                : FailureStatus.RESUELTO);
-        report.getAsset().setOperationalStatus(switch (request.finalEquipmentState()) {
+        if (maintenanceEvidenceStorageService != null) {
+            history.getEvidences().addAll(maintenanceEvidenceStorageService.storeAll(evidences));
+        }
+        history.setStatus(MaintenanceHistoryStatus.PENDING_REVIEW);
+        report.setEstado(FailureStatus.EN_CIERRE);
+        report.setFechaEnvioCierre(now);
+
+        maintenanceHistoryRepository.save(history);
+        return toResponse(failureReportRepository.save(report));
+    }
+
+    public FailureReportResponse saveIntervention(
+            Long id, FailureInterventionRequest request, Authentication authentication) {
+        return saveIntervention(id, request, List.of(), authentication);
+    }
+
+    public MaintenanceHistoryResponse getIntervention(Long id, Authentication authentication) {
+        FailureReport report = requireVisibleReport(id, authentication);
+        MaintenanceHistory history = maintenanceHistoryRepository.findByFailureReportId(report.getId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "El técnico aún no ha enviado la intervención para revisión"));
+        return assetService.toHistoryResponse(history);
+    }
+
+    @Transactional
+    public FailureReportResponse closeAfterReview(
+            Long id, FailureReportCloseRequest request, Authentication authentication) {
+        if (!isAdministrator(authentication)
+                && !hasRole(requireActiveUser(authentication.getName()), "SUPERVISOR")) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN, "Solo el administrador o supervisor puede cerrar la orden");
+        }
+        FailureReport report = failureReportRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Falla no encontrada"));
+        if (report.getEstado() != FailureStatus.EN_CIERRE) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "La orden debe estar En cierre y tener una intervención para revisión");
+        }
+        MaintenanceHistory history = maintenanceHistoryRepository.findByFailureReportId(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.CONFLICT, "No hay una intervención técnica para cerrar"));
+        if (history.getFinalEquipmentState() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "La intervención no tiene un estado final del activo");
+        }
+        LocalDateTime closedAt = LocalDateTime.now();
+        Usuario reviewer = requireActiveUser(authentication.getName());
+        history.setReviewObservations(request.reviewObservations().trim());
+        history.setReviewedBy(reviewer.getNombre());
+        history.setReviewedAt(closedAt);
+        history.setStatus(history.getFinalEquipmentState() == EquipmentFinalState.INOPERATIVE_WAITING_PART
+                ? MaintenanceHistoryStatus.PARTIALLY_COMPLETED
+                : MaintenanceHistoryStatus.COMPLETED);
+        report.setEstado(FailureStatus.RESUELTO);
+        report.setFechaCierre(closedAt);
+        report.getAsset().setOperationalStatus(switch (history.getFinalEquipmentState()) {
             case OPERATIONAL -> OperationalStatus.OPERATIONAL;
             case OPERATIONAL_WITH_RESTRICTIONS -> OperationalStatus.OPERATIONAL_WITH_RESTRICTIONS;
             case INOPERATIVE_WAITING_PART -> OperationalStatus.IN_REPAIR;
         });
-
         maintenanceHistoryRepository.save(history);
         return toResponse(failureReportRepository.save(report));
     }
@@ -279,15 +390,13 @@ public class FailureReportService {
         history.setRootCause(request.rootCause().trim());
         history.setTasksDescription(request.tasksPerformed().trim());
         history.setWorkMinutes(request.workMinutes());
+        updateHorometer(report.getAsset(), history, request.horometerReading());
         history.setTestsPerformed(request.testsPerformed().trim());
         history.setFinalEquipmentState(request.finalEquipmentState());
         history.setRecommendations(request.recommendations().trim());
         history.setPendingTasks(normalizeOptional(request.pendingTasks()));
         history.setTechnicianName(request.technicianName().trim());
         history.setReceivedBy(normalizeOptional(request.receivedBy()));
-        history.setStatus(request.finalEquipmentState() == EquipmentFinalState.INOPERATIVE_WAITING_PART
-                ? MaintenanceHistoryStatus.PARTIALLY_COMPLETED
-                : MaintenanceHistoryStatus.COMPLETED);
         List<MaintenancePartRequest> resolvedParts = new ArrayList<>();
         if (request.replacedParts() != null && !request.replacedParts().isEmpty()) {
             for (MaintenancePartRequest partReq : request.replacedParts()) {
@@ -363,6 +472,21 @@ public class FailureReportService {
         history.setSignedAt(executedAt);
     }
 
+    private void updateHorometer(Asset asset, MaintenanceHistory history, java.math.BigDecimal reading) {
+        if (reading == null) return;
+        Asset lockedAsset = assetRepository.findByIdForUpdate(asset.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Activo no encontrado"));
+        java.math.BigDecimal current = lockedAsset.getCurrentHorometer() == null
+                ? java.math.BigDecimal.ZERO
+                : lockedAsset.getCurrentHorometer();
+        if (reading.compareTo(current) < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "El horómetro no puede ser menor a la última lectura registrada (" + current + ")");
+        }
+        lockedAsset.setCurrentHorometer(reading);
+        history.setHorometerAtMaintenance(reading);
+    }
+
     private MaintenancePart toMaintenancePart(MaintenancePartRequest request) {
         MaintenancePart part = new MaintenancePart();
         part.setPartNumber(request.partNumber() != null ? request.partNumber().trim() : "REP-" + request.itemId());
@@ -402,34 +526,52 @@ public class FailureReportService {
         List<Usuario> technicians = group.getMembers().stream()
                 .filter(user -> !Boolean.FALSE.equals(user.getActivo()) && hasRole(user, "TECNICO"))
                 .sorted(Comparator.comparing(Usuario::getId))
+                .map(this::lockTechnician)
+                .filter(user -> activeWorkload(user) < TECHNICIAN_WORKLOAD_CAPACITY)
+                .sorted(Comparator.comparingLong(this::activeWorkload).thenComparing(Usuario::getId))
                 .toList();
         if (technicians.isEmpty()) {
             throw new ResponseStatusException(
-                    HttpStatus.CONFLICT, "El grupo no tiene miembros activos con permisos de técnico");
+                    HttpStatus.CONFLICT, "No hay técnicos disponibles en el grupo (máximo 3 reportes activos por técnico)");
         }
 
-        Long lastAssignedId = group.getLastAssignedTechnicianId();
-        int lastIndex = -1;
-        for (int index = 0; index < technicians.size(); index++) {
-            if (technicians.get(index).getId().equals(lastAssignedId)) {
-                lastIndex = index;
-                break;
-            }
-        }
-        Usuario selected = technicians.get((lastIndex + 1) % technicians.size());
+        Usuario selected = technicians.getFirst();
         group.setLastAssignedTechnicianId(selected.getId());
         workGroupRepository.save(group);
         return selected;
     }
 
     private Usuario chooseTechnician(WorkGroup group, Long requestedTechnicianId) {
-        return group.getMembers().stream()
+        Usuario candidate = group.getMembers().stream()
                 .filter(user -> user.getId().equals(requestedTechnicianId))
                 .filter(user -> !Boolean.FALSE.equals(user.getActivo()) && hasRole(user, "TECNICO"))
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
                         "El técnico seleccionado debe estar activo y pertenecer al grupo con rol de técnico"));
+        Usuario technician = lockTechnician(candidate);
+        if (activeWorkload(technician) >= TECHNICIAN_WORKLOAD_CAPACITY) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "El técnico seleccionado alcanzó su máximo de 3 trabajos activos");
+        }
+        return technician;
+    }
+
+    private Usuario lockTechnician(Usuario technician) {
+        return usuarioRepository.findByIdForUpdate(technician.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Técnico no encontrado"));
+    }
+
+    private long activeWorkload(Usuario technician) {
+        long active = failureReportRepository.countByAssignedTechnicianIdAndEstadoIn(
+                technician.getId(), ACTIVE_WORKLOAD_STATUSES);
+        if (preventiveMaintenanceRepository != null) {
+            active += preventiveMaintenanceRepository.countByTechnician_IdAndStatusIn(
+                    technician.getId(), Set.of(
+                            com.agrosentinel.agrosentinel.models.PreventiveMaintenanceStatus.SCHEDULED,
+                            com.agrosentinel.agrosentinel.models.PreventiveMaintenanceStatus.PARTIALLY_COMPLETED));
+        }
+        return active;
     }
 
     private FailureReport requireVisibleReport(Long id, Authentication authentication) {
@@ -452,7 +594,8 @@ public class FailureReportService {
     }
 
     private FailureReport requireAssignedReport(Long id, Authentication authentication) {
-        FailureReport report = requireVisibleReport(id, authentication);
+        FailureReport report = failureReportRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Falla no encontrada"));
         Usuario currentUser = requireActiveUser(authentication.getName());
         if (report.getAssignedTechnician() == null
                 || !report.getAssignedTechnician().getId().equals(currentUser.getId())) {
@@ -506,6 +649,12 @@ public class FailureReportService {
                 report.getAsset().getBrand(),
                 report.getAsset().getModel(),
                 report.getAsset().getSerialNumber(),
-                report.getAsset().getInventoryCode());
+                report.getAsset().getInventoryCode(),
+                report.getFechaAsignacion(),
+                report.getFechaCierre(),
+                report.getFechaEnvioCierre(),
+                report.getFechaInicioRevision() == null || report.getFechaCierre() == null
+                        ? null
+                        : Duration.between(report.getFechaInicioRevision(), report.getFechaCierre()).toMinutes());
     }
 }

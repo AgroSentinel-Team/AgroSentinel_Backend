@@ -2,6 +2,7 @@ package com.agrosentinel.agrosentinel.models;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -53,6 +54,9 @@ public class PreventiveMaintenance {
 
     @Column(name = "predictive_context", columnDefinition = "text")
     private String predictiveContext;
+
+    @Column(name = "horometer_at_execution", precision = 12, scale = 2)
+    private BigDecimal horometerAtExecution;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

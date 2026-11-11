@@ -11,12 +11,15 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class FailureEvidenceWebConfig implements WebMvcConfigurer {
     private final String storageLocation;
     private final String maintenanceStorageLocation;
+    private final String assetImageStorageLocation;
 
     public FailureEvidenceWebConfig(
             @Value("${agrosentinel.failure-evidence.location}") String storageLocation,
-            @Value("${agrosentinel.maintenance-evidence.location}") String maintenanceStorageLocation) {
+            @Value("${agrosentinel.maintenance-evidence.location}") String maintenanceStorageLocation,
+            @Value("${agrosentinel.asset-image.location}") String assetImageStorageLocation) {
         this.storageLocation = Path.of(storageLocation).toAbsolutePath().normalize().toUri().toString();
         this.maintenanceStorageLocation = Path.of(maintenanceStorageLocation).toAbsolutePath().normalize().toUri().toString();
+        this.assetImageStorageLocation = Path.of(assetImageStorageLocation).toAbsolutePath().normalize().toUri().toString();
     }
 
     @Override
@@ -27,5 +30,9 @@ public class FailureEvidenceWebConfig implements WebMvcConfigurer {
                 .addResourceLocations(maintenanceStorageLocation.endsWith("/")
                         ? maintenanceStorageLocation
                         : maintenanceStorageLocation + "/");
+        registry.addResourceHandler("/uploads/asset-images/**")
+                .addResourceLocations(assetImageStorageLocation.endsWith("/")
+                        ? assetImageStorageLocation
+                        : assetImageStorageLocation + "/");
     }
 }

@@ -2,9 +2,12 @@ package com.agrosentinel.agrosentinel.services;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
@@ -17,6 +20,7 @@ import com.agrosentinel.agrosentinel.dtos.PreventiveMaintenanceExecutionRequest;
 import com.agrosentinel.agrosentinel.dtos.PreventiveMaintenanceResponse;
 import com.agrosentinel.agrosentinel.dtos.PreventiveMaintenanceTaskRequest;
 import com.agrosentinel.agrosentinel.dtos.PreventiveMaintenanceTaskResponse;
+import com.agrosentinel.agrosentinel.dtos.TechnicianAvailabilityResponse;
 import com.agrosentinel.agrosentinel.models.Asset;
 import com.agrosentinel.agrosentinel.models.MaintenanceAttentionIndex;
 import com.agrosentinel.agrosentinel.models.MaintenanceHistory;
@@ -26,25 +30,82 @@ import com.agrosentinel.agrosentinel.models.MaintenanceType;
 import com.agrosentinel.agrosentinel.models.PreventiveMaintenance;
 import com.agrosentinel.agrosentinel.models.PreventiveMaintenanceEvidence;
 import com.agrosentinel.agrosentinel.models.PreventiveMaintenanceStatus;
+import com.agrosentinel.agrosentinel.models.FailureStatus;
 import com.agrosentinel.agrosentinel.models.PreventiveMaintenanceTask;
 import com.agrosentinel.agrosentinel.models.Usuario;
 import com.agrosentinel.agrosentinel.repositories.AssetRepository;
+import com.agrosentinel.agrosentinel.repositories.FailureReportRepository;
 import com.agrosentinel.agrosentinel.repositories.MaintenanceHistoryRepository;
 import com.agrosentinel.agrosentinel.repositories.PreventiveMaintenanceRepository;
 import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
 
-import lombok.RequiredArgsConstructor;
 
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class PreventiveMaintenanceService {
+    private static final int TECHNICIAN_WORKLOAD_CAPACITY = 3;
+    private static final Set<FailureStatus> ACTIVE_FAILURE_STATUSES = Set.of(
+            FailureStatus.PENDIENTE,
+            FailureStatus.ASIGNADA,
+            FailureStatus.EN_EJECUCION,
+            FailureStatus.EN_CIERRE,
+            FailureStatus.EN_REVISION,
+            FailureStatus.ESPERA_REPUESTO);
+    private static final Set<PreventiveMaintenanceStatus> ACTIVE_PREVENTIVE_STATUSES = Set.of(
+            PreventiveMaintenanceStatus.SCHEDULED,
+            PreventiveMaintenanceStatus.PARTIALLY_COMPLETED);
+
     private final PreventiveMaintenanceRepository maintenanceRepository;
     private final AssetRepository assetRepository;
     private final UsuarioRepository usuarioRepository;
     private final MaintenanceHistoryRepository maintenanceHistoryRepository;
     private final PreventiveMaintenanceEvidenceStorageService evidenceStorageService;
     private final UserRoleService userRoleService;
+    private final UserNotificationService notificationService;
+    private final FailureReportRepository failureReportRepository;
+
+    @Autowired
+    public PreventiveMaintenanceService(
+            PreventiveMaintenanceRepository maintenanceRepository,
+            AssetRepository assetRepository,
+            UsuarioRepository usuarioRepository,
+            MaintenanceHistoryRepository maintenanceHistoryRepository,
+            PreventiveMaintenanceEvidenceStorageService evidenceStorageService,
+            UserRoleService userRoleService,
+            UserNotificationService notificationService,
+            FailureReportRepository failureReportRepository) {
+        this.maintenanceRepository = maintenanceRepository;
+        this.assetRepository = assetRepository;
+        this.usuarioRepository = usuarioRepository;
+        this.maintenanceHistoryRepository = maintenanceHistoryRepository;
+        this.evidenceStorageService = evidenceStorageService;
+        this.userRoleService = userRoleService;
+        this.notificationService = notificationService;
+        this.failureReportRepository = failureReportRepository;
+    }
+
+    public PreventiveMaintenanceService(
+            PreventiveMaintenanceRepository maintenanceRepository,
+            AssetRepository assetRepository,
+            UsuarioRepository usuarioRepository,
+            MaintenanceHistoryRepository maintenanceHistoryRepository,
+            PreventiveMaintenanceEvidenceStorageService evidenceStorageService,
+            UserRoleService userRoleService,
+            UserNotificationService notificationService) {
+        this(maintenanceRepository, assetRepository, usuarioRepository, maintenanceHistoryRepository,
+                evidenceStorageService, userRoleService, notificationService, null);
+    }
+
+    public PreventiveMaintenanceService(
+            PreventiveMaintenanceRepository maintenanceRepository,
+            AssetRepository assetRepository,
+            UsuarioRepository usuarioRepository,
+            MaintenanceHistoryRepository maintenanceHistoryRepository,
+            PreventiveMaintenanceEvidenceStorageService evidenceStorageService,
+            UserRoleService userRoleService) {
+        this(maintenanceRepository, assetRepository, usuarioRepository, maintenanceHistoryRepository,
+                evidenceStorageService, userRoleService, null, null);
+    }
 
     public List<PreventiveMaintenanceResponse> findAll(Authentication authentication) {
         List<PreventiveMaintenance> maintenances = isAdministrator(authentication) || isSupervisor(authentication)
@@ -55,6 +116,25 @@ public class PreventiveMaintenanceService {
 
     public PreventiveMaintenanceResponse findById(Long id, Authentication authentication) {
         return toResponse(requireVisibleMaintenance(id, authentication));
+    }
+
+    public List<TechnicianAvailabilityResponse> findTechnicianAvailability(Authentication authentication) {
+        if (!isAdministrator(authentication)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Solo un administrador puede consultar disponibilidad");
+        }
+        return usuarioRepository.findAll().stream()
+                .filter(user -> !Boolean.FALSE.equals(user.getActivo()))
+                .filter(user -> userRoleService.getEffectiveRoles(user).contains("TECNICO"))
+                .map(user -> {
+                    long workload = activeWorkload(user);
+                    return new TechnicianAvailabilityResponse(
+                            user.getId(),
+                            user.getNombre(),
+                            workload,
+                            TECHNICIAN_WORKLOAD_CAPACITY,
+                            workload < TECHNICIAN_WORKLOAD_CAPACITY);
+                })
+                .toList();
     }
 
     @Transactional
@@ -68,11 +148,16 @@ public class PreventiveMaintenanceService {
         if (!asset.isActive()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede programar un activo inactivo");
         }
-        Usuario technician = usuarioRepository.findById(request.technicianId())
+        Usuario technician = usuarioRepository.findByIdForUpdate(request.technicianId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Técnico no encontrado"));
         if (Boolean.FALSE.equals(technician.getActivo())
                 || !userRoleService.getEffectiveRoles(technician).contains("TECNICO")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecciona un técnico activo");
+        }
+        long workload = activeWorkload(technician);
+        if (workload >= TECHNICIAN_WORKLOAD_CAPACITY) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "El técnico seleccionado alcanzó su máximo de 3 trabajos activos");
         }
 
         PreventiveMaintenance maintenance = new PreventiveMaintenance();
@@ -85,7 +170,24 @@ public class PreventiveMaintenanceService {
         maintenance.setPredictiveContext(request.predictiveContext());
         PreventiveMaintenance saved = maintenanceRepository.save(maintenance);
         saveScheduledMaintenanceHistory(saved);
+        if (notificationService != null) {
+            notificationService.notifyAssignment(
+                    technician,
+                    "Mantenimiento preventivo asignado",
+                    "Se programó mantenimiento para " + asset.getName() + " el " + request.scheduledAt() + ".",
+                    "/tecnico/dashboard");
+        }
         return toResponse(saved);
+    }
+
+    private long activeWorkload(Usuario technician) {
+        long workload = 0;
+        if (failureReportRepository != null) {
+            workload += failureReportRepository.countByAssignedTechnicianIdAndEstadoIn(
+                    technician.getId(), ACTIVE_FAILURE_STATUSES);
+        }
+        return workload + maintenanceRepository.countByTechnician_IdAndStatusIn(
+                technician.getId(), ACTIVE_PREVENTIVE_STATUSES);
     }
 
     @Transactional
@@ -107,6 +209,7 @@ public class PreventiveMaintenanceService {
         if (request.nextMaintenanceDate() != null && request.nextMaintenanceDate().isBefore(LocalDate.now())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La próxima fecha debe ser hoy o una fecha futura");
         }
+        updateHorometer(maintenance.getAsset(), request.horometerReading());
 
         LocalDateTime executedAt = LocalDateTime.now();
         LocalDate nextDate = request.nextMaintenanceDate() != null
@@ -121,6 +224,7 @@ public class PreventiveMaintenanceService {
         maintenance.setTechnicianNotes(request.technicianNotes());
         maintenance.setNextMaintenanceDate(nextDate);
         maintenance.setConfirmedAt(executedAt);
+        maintenance.setHorometerAtExecution(request.horometerReading());
 
         for (PreventiveMaintenanceTaskRequest taskRequest : request.tasks()) {
             PreventiveMaintenanceTask task = new PreventiveMaintenanceTask();
@@ -201,6 +305,7 @@ public class PreventiveMaintenanceService {
         history.setSignedAt(maintenance.getConfirmedAt());
         history.setTasksDescription(summary);
         history.setNextRecommendedDate(maintenance.getNextMaintenanceDate());
+        history.setHorometerAtMaintenance(maintenance.getHorometerAtExecution());
         maintenanceHistoryRepository.save(history);
     }
 
@@ -286,6 +391,24 @@ public class PreventiveMaintenanceService {
                         .map(PreventiveMaintenanceEvidence::getUrl)
                         .toList(),
                 effectiveAttentionIndex(maintenance),
-                maintenance.getPredictiveContext());
+                maintenance.getPredictiveContext(),
+                maintenance.getAsset().getCurrentHorometer() == null
+                        ? BigDecimal.ZERO
+                        : maintenance.getAsset().getCurrentHorometer(),
+                maintenance.getHorometerAtExecution());
+    }
+
+    private void updateHorometer(Asset asset, BigDecimal reading) {
+        if (reading == null) return;
+        Asset lockedAsset = assetRepository.findByIdForUpdate(asset.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Activo no encontrado"));
+        BigDecimal current = lockedAsset.getCurrentHorometer() == null
+                ? BigDecimal.ZERO
+                : lockedAsset.getCurrentHorometer();
+        if (reading.compareTo(current) < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "El horómetro no puede ser menor a la última lectura registrada (" + current + ")");
+        }
+        lockedAsset.setCurrentHorometer(reading);
     }
 }

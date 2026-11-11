@@ -19,6 +19,7 @@ import com.agrosentinel.agrosentinel.models.Usuario;
 import com.agrosentinel.agrosentinel.models.WorkGroup;
 import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
 import com.agrosentinel.agrosentinel.repositories.WorkGroupRepository;
+import com.agrosentinel.agrosentinel.repositories.FailureReportRepository;
 
 class WorkGroupServiceTest {
     @Test
@@ -34,7 +35,8 @@ class WorkGroupServiceTest {
         when(workGroupRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         WorkGroupResponse response = new WorkGroupService(
-                workGroupRepository, usuarioRepository, mock(UserRoleService.class))
+                workGroupRepository, usuarioRepository, mock(UserRoleService.class),
+                mock(FailureReportRepository.class))
                 .create(new WorkGroupRequest("Zona norte", "Equipo norte", 1L, Set.of(2L), Set.of("role_tecnico")));
 
         assertEquals(2, response.members().size());
@@ -47,7 +49,8 @@ class WorkGroupServiceTest {
         WorkGroupRepository workGroupRepository = mock(WorkGroupRepository.class);
         when(workGroupRepository.findByIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(new WorkGroup()));
         WorkGroupService service = new WorkGroupService(
-                workGroupRepository, mock(UsuarioRepository.class), mock(UserRoleService.class));
+                workGroupRepository, mock(UsuarioRepository.class), mock(UserRoleService.class),
+                mock(FailureReportRepository.class));
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> service.updateRoles(1L, Set.of("ADMINISTRADOR")));

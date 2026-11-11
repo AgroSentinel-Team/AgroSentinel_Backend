@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -17,21 +18,55 @@ import com.agrosentinel.agrosentinel.dtos.WorkGroupRequest;
 import com.agrosentinel.agrosentinel.dtos.WorkGroupResponse;
 import com.agrosentinel.agrosentinel.models.Usuario;
 import com.agrosentinel.agrosentinel.models.WorkGroup;
+import com.agrosentinel.agrosentinel.models.FailureStatus;
+import com.agrosentinel.agrosentinel.models.PreventiveMaintenanceStatus;
+import com.agrosentinel.agrosentinel.repositories.FailureReportRepository;
+import com.agrosentinel.agrosentinel.repositories.PreventiveMaintenanceRepository;
 import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
 import com.agrosentinel.agrosentinel.repositories.WorkGroupRepository;
 
-import lombok.RequiredArgsConstructor;
 
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class WorkGroupService {
+    private static final int TECHNICIAN_WORKLOAD_CAPACITY = 3;
+    private static final Set<FailureStatus> ACTIVE_FAILURE_STATUSES = Set.of(
+            FailureStatus.PENDIENTE,
+            FailureStatus.ASIGNADA,
+            FailureStatus.EN_EJECUCION,
+            FailureStatus.EN_CIERRE,
+            FailureStatus.EN_REVISION,
+            FailureStatus.ESPERA_REPUESTO);
     private static final Set<String> GRANTABLE_ROLES = Set.of(
             "TECNICO", "SUPERVISOR", "ALMACENISTA", "OPERATIVO_CAMPO", "OPERARIO_CAMPO");
 
     private final WorkGroupRepository workGroupRepository;
     private final UsuarioRepository usuarioRepository;
     private final UserRoleService userRoleService;
+    private final FailureReportRepository failureReportRepository;
+    private final PreventiveMaintenanceRepository preventiveMaintenanceRepository;
+
+    @Autowired
+    public WorkGroupService(
+            WorkGroupRepository workGroupRepository,
+            UsuarioRepository usuarioRepository,
+            UserRoleService userRoleService,
+            FailureReportRepository failureReportRepository,
+            PreventiveMaintenanceRepository preventiveMaintenanceRepository) {
+        this.workGroupRepository = workGroupRepository;
+        this.usuarioRepository = usuarioRepository;
+        this.userRoleService = userRoleService;
+        this.failureReportRepository = failureReportRepository;
+        this.preventiveMaintenanceRepository = preventiveMaintenanceRepository;
+    }
+
+    public WorkGroupService(
+            WorkGroupRepository workGroupRepository,
+            UsuarioRepository usuarioRepository,
+            UserRoleService userRoleService,
+            FailureReportRepository failureReportRepository) {
+        this(workGroupRepository, usuarioRepository, userRoleService, failureReportRepository, null);
+    }
 
     public List<WorkGroupResponse> findAll() {
         return workGroupRepository.findAllByDeletedAtIsNullOrderByNameAsc().stream()
@@ -155,13 +190,7 @@ public class WorkGroupService {
     private WorkGroupResponse toResponse(WorkGroup group) {
         List<WorkGroupMemberResponse> members = group.getMembers().stream()
                 .sorted(Comparator.comparing(Usuario::getNombre, String.CASE_INSENSITIVE_ORDER))
-                .map(member -> new WorkGroupMemberResponse(
-                        member.getId(),
-                        member.getNombre(),
-                        member.getEmail(),
-                        member.getRol(),
-                        userRoleService.getEffectiveRoles(member),
-                        group.getLeader() != null && group.getLeader().getId().equals(member.getId())))
+                .map(member -> toMemberResponse(group, member))
                 .toList();
         return new WorkGroupResponse(
                 group.getId(),
@@ -173,4 +202,33 @@ public class WorkGroupService {
                 Set.copyOf(group.getGrantedRoles()),
                 group.getDeletedAt() == null);
     }
+
+    private WorkGroupMemberResponse toMemberResponse(WorkGroup group, Usuario member) {
+        Set<String> roles = userRoleService.getEffectiveRoles(member);
+        boolean technician = roles.stream()
+                .map(role -> role.toUpperCase(Locale.ROOT).replaceFirst("^ROLE_", ""))
+                .anyMatch("TECNICO"::equals);
+        long activeWorkload = technician
+                ? failureReportRepository.countByAssignedTechnicianIdAndEstadoIn(
+                        member.getId(), ACTIVE_FAILURE_STATUSES)
+                : 0;
+        if (technician && preventiveMaintenanceRepository != null) {
+            activeWorkload += preventiveMaintenanceRepository.countByTechnician_IdAndStatusIn(
+                    member.getId(), Set.of(
+                            PreventiveMaintenanceStatus.SCHEDULED,
+                            PreventiveMaintenanceStatus.PARTIALLY_COMPLETED));
+        }
+        return new WorkGroupMemberResponse(
+                member.getId(),
+                member.getNombre(),
+                member.getEmail(),
+                member.getRol(),
+                roles,
+                group.getLeader() != null && group.getLeader().getId().equals(member.getId()),
+                activeWorkload,
+                TECHNICIAN_WORKLOAD_CAPACITY,
+                technician && !Boolean.FALSE.equals(member.getActivo())
+                        && activeWorkload < TECHNICIAN_WORKLOAD_CAPACITY);
+    }
+
 }

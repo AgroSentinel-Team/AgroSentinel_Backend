@@ -58,6 +58,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/assets/assigned", "/api/assets/assigned/**")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA",
                             "OPERATIVO_CAMPO", "OPERARIO_CAMPO")
+                .requestMatchers(HttpMethod.GET, "/api/assets/*/failure-trends")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "SUPERVISOR")
                 .requestMatchers(HttpMethod.GET, "/api/assets")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA")
                 .requestMatchers(HttpMethod.GET, "/api/users")
@@ -67,10 +69,15 @@ public class SecurityConfig {
                 .requestMatchers("/api/work-groups/options")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA",
                             "OPERATIVO_CAMPO", "OPERARIO_CAMPO")
+                .requestMatchers("/api/notifications/**")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA",
+                            "OPERATIVO_CAMPO", "OPERARIO_CAMPO")
                 .requestMatchers("/api/work-groups/**")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/categories")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO")
+                .requestMatchers(HttpMethod.GET, "/api/preventive-maintenances/technicians/availability")
+                    .hasAnyRole("ADMINISTRADOR", "ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/preventive-maintenances", "/api/preventive-maintenances/**")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR")
                 .requestMatchers("/api/preventive-maintenances/**")
@@ -81,6 +88,8 @@ public class SecurityConfig {
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA")
                 .requestMatchers("/uploads/failure-evidence/**")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA")
+                .requestMatchers("/uploads/asset-images/**")
+                    .permitAll()
                 .requestMatchers("/api/failure-reports", "/api/failure-reports/**")
                     .hasAnyRole("ADMINISTRADOR", "ADMIN", "TECNICO", "SUPERVISOR", "ALMACENISTA",
                             "OPERATIVO_CAMPO", "OPERARIO_CAMPO")

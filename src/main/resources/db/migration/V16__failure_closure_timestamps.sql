@@ -1,0 +1,2 @@
+ALTER TABLE failure_reports
+    ADD COLUMN IF NOT EXISTS fecha_envio_cierre TIMESTAMP WITHOUT TIME ZONE;

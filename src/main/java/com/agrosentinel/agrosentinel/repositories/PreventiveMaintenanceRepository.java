@@ -1,6 +1,7 @@
 package com.agrosentinel.agrosentinel.repositories;
 
 import java.util.List;
+import java.util.Collection;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -14,4 +15,6 @@ public interface PreventiveMaintenanceRepository extends JpaRepository<Preventiv
 
     List<PreventiveMaintenance> findAllByAssetIdAndStatusOrderByScheduledAtAsc(
             Long assetId, PreventiveMaintenanceStatus status);
+
+    long countByTechnician_IdAndStatusIn(Long technicianId, Collection<PreventiveMaintenanceStatus> statuses);
 }

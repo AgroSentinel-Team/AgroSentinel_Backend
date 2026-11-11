@@ -8,5 +8,8 @@ public record WorkGroupMemberResponse(
         String email,
         String rol,
         Set<String> roles,
-        boolean lider) {
+        boolean lider,
+        long activeWorkload,
+        int workloadCapacity,
+        boolean available) {
 }

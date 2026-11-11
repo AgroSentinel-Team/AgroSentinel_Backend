@@ -25,5 +25,9 @@ public record FailureReportResponse(
         String assetBrand,
         String assetModel,
         String assetSerialNumber,
-        String assetInventoryCode) {
+        String assetInventoryCode,
+        LocalDateTime fechaAsignacion,
+        LocalDateTime fechaCierre,
+        LocalDateTime fechaEnvioCierre,
+        Long repairDurationMinutes) {
 }

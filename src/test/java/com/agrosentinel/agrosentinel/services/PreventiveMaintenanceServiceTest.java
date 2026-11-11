@@ -88,6 +88,7 @@ class PreventiveMaintenanceServiceTest {
         LocalDateTime scheduledAt = LocalDateTime.of(2026, 11, 1, 9, 30);
         when(assetRepository.findById(7L)).thenReturn(Optional.of(asset));
         when(usuarioRepository.findById(3L)).thenReturn(Optional.of(technician));
+        when(usuarioRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(technician));
         when(maintenanceRepository.save(any(PreventiveMaintenance.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         Authentication administrator = authentication("admin@example.com", "ROLE_ADMIN");

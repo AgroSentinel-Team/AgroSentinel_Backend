@@ -1,14 +1,19 @@
 package com.agrosentinel.agrosentinel.services;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.agrosentinel.agrosentinel.dtos.AssetRequest;
+import com.agrosentinel.agrosentinel.dtos.AssetFailureTrendResponse;
 import com.agrosentinel.agrosentinel.dtos.AssetResponse;
 import com.agrosentinel.agrosentinel.dtos.AssetResumeResponse;
 import com.agrosentinel.agrosentinel.dtos.MaintenanceHistoryResponse;
@@ -38,6 +43,7 @@ public class AssetService {
     private final UsuarioRepository usuarioRepository;
     private final MaintenanceHistoryRepository maintenanceHistoryRepository;
     private final PreventiveMaintenanceRepository preventiveMaintenanceRepository;
+    private final AssetImageStorageService assetImageStorageService;
 
     public List<AssetResponse> findAll() {
         return assetRepository.findAll().stream().map(this::toResponse).toList();
@@ -80,6 +86,13 @@ public class AssetService {
     }
 
     @Transactional
+    public AssetResponse updateImage(Long id, MultipartFile image) {
+        Asset asset = findAsset(id);
+        asset.setImageUrl(assetImageStorageService.store(image));
+        return toResponse(assetRepository.save(asset));
+    }
+
+    @Transactional
     public AssetResponse deactivate(Long id) {
         Asset asset = findAsset(id);
         asset.setActive(false);
@@ -103,6 +116,61 @@ public class AssetService {
                 .map(this::toHistoryResponse)
                 .toList();
         return new AssetResumeResponse(toResponse(asset), history);
+    }
+
+    public AssetFailureTrendResponse getFailureTrends(Long id) {
+        Asset asset = findAsset(id);
+        List<MaintenanceHistory> failures = maintenanceHistoryRepository
+                .findAllByAssetIdOrderByMaintenanceDateDesc(id).stream()
+                .filter(history -> history.getType() == MaintenanceType.CORRECTIVE)
+                .filter(history -> history.getMaintenanceDate() != null)
+                .sorted(java.util.Comparator.comparing(MaintenanceHistory::getMaintenanceDate))
+                .toList();
+        int baseInterval = asset.getCategory().getMaintenanceFrequencyDays() > 0
+                ? asset.getCategory().getMaintenanceFrequencyDays()
+                : 90;
+        Double averageDays = null;
+        int suggestedInterval = baseInterval;
+        if (failures.size() >= 2) {
+            long totalDays = 0;
+            for (int index = 1; index < failures.size(); index++) {
+                totalDays += ChronoUnit.DAYS.between(
+                        failures.get(index - 1).getMaintenanceDate(),
+                        failures.get(index).getMaintenanceDate());
+            }
+            averageDays = (double) totalDays / (failures.size() - 1);
+            suggestedInterval = Math.min(
+                    baseInterval, Math.max(7, (int) Math.round(averageDays * 0.8)));
+        }
+
+        Map<String, Long> repeated = failures.stream()
+                .map(MaintenanceHistory::getActualFailure)
+                .filter(value -> value != null && !value.isBlank())
+                .collect(Collectors.groupingBy(
+                        value -> value.trim().toLowerCase(java.util.Locale.ROOT),
+                        Collectors.counting()));
+        List<String> recurringFailures = failures.stream()
+                .map(MaintenanceHistory::getActualFailure)
+                .filter(value -> value != null && !value.isBlank())
+                .filter(value -> repeated.get(value.trim().toLowerCase(java.util.Locale.ROOT)) > 1)
+                .map(String::trim)
+                .distinct()
+                .toList();
+        String summary = failures.size() < 2
+                ? "Historial insuficiente para calcular tendencias; se conserva la frecuencia base de la categoría."
+                : recurringFailures.isEmpty()
+                        ? "El intervalo sugerido se ajustó con el promedio de tiempo entre fallas históricas."
+                        : "Se repiten fallas similares. Se recomienda revisar las causas recurrentes y usar un intervalo preventivo más corto.";
+
+        return new AssetFailureTrendResponse(
+                asset.getId(),
+                failures.size(),
+                averageDays,
+                baseInterval,
+                suggestedInterval,
+                asset.getCurrentHorometer() == null ? java.math.BigDecimal.ZERO : asset.getCurrentHorometer(),
+                recurringFailures,
+                summary);
     }
 
     public List<MaintenanceHistoryResponse> getTechnicianHistory(Long technicianId) {
@@ -183,21 +251,17 @@ public class AssetService {
                 asset.getResponsible().getId(), asset.getResponsible().getNombre(), asset.getAcquisitionDate(),
                 asset.getAcquisitionCost(), asset.getProvider(), asset.getWarrantyExpirationDate(),
                 asset.getLocation(), asset.getOperationalStatus(), asset.isActive(), asset.isHasMotor(),
-                asset.isHasMotor() ? "MOTOR-" + asset.getId() : null);
+                asset.isHasMotor() ? "MOTOR-" + asset.getId() : null, asset.getImageUrl(),
+                asset.getCurrentHorometer() == null ? java.math.BigDecimal.ZERO : asset.getCurrentHorometer());
     }
 
-    private MaintenanceHistoryResponse toHistoryResponse(MaintenanceHistory history) {
+    public MaintenanceHistoryResponse toHistoryResponse(MaintenanceHistory history) {
         return new MaintenanceHistoryResponse(
                 history.getId(), history.getMaintenanceDate(), history.getType(), history.getTasksDescription(),
                 history.getCost(), history.getProvider(), history.getNextRecommendedDate(), history.getStatus(),
                 history.getScheduledAt(), history.getExecutedAt(), history.getTechnicianName(),
                 history.getReplacedParts(), history.getSignedAt(),
-                history.getPreventiveMaintenance() != null
-                        ? history.getPreventiveMaintenance().getEvidences().stream()
-                                .map(evidence -> evidence.getUrl()).toList()
-                        : history.getFailureReport() != null && history.getFailureReport().getEvidenciaUrl() != null
-                                ? List.of(history.getFailureReport().getEvidenciaUrl())
-                                : List.of(),
+                historyEvidence(history),
                 history.getFailureReport() == null ? null : history.getFailureReport().getId(),
                 history.getEquipmentIntervened(),
                 history.getInitialReportedSymptom(),
@@ -216,6 +280,23 @@ public class AssetService {
                 history.getPendingTasks(),
                 history.getReceivedBy(),
                 history.getAsset().getId(),
-                history.getAsset().getName());
+                history.getAsset().getName(),
+                history.getReviewObservations(),
+                history.getReviewedBy(),
+                history.getReviewedAt(),
+                history.getHorometerAtMaintenance());
+    }
+
+    private List<String> historyEvidence(MaintenanceHistory history) {
+        List<String> evidences = new java.util.ArrayList<>(history.getEvidences());
+        if (history.getPreventiveMaintenance() != null) {
+            history.getPreventiveMaintenance().getEvidences().stream()
+                    .map(evidence -> evidence.getUrl())
+                    .forEach(evidences::add);
+        }
+        if (history.getFailureReport() != null && history.getFailureReport().getEvidenciaUrl() != null) {
+            evidences.add(history.getFailureReport().getEvidenciaUrl());
+        }
+        return List.copyOf(evidences);
     }
 }

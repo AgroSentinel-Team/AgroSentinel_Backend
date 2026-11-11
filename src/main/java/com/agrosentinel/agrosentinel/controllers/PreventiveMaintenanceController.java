@@ -19,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.agrosentinel.agrosentinel.dtos.PreventiveMaintenanceCreateRequest;
 import com.agrosentinel.agrosentinel.dtos.PreventiveMaintenanceExecutionRequest;
 import com.agrosentinel.agrosentinel.dtos.PreventiveMaintenanceResponse;
+import com.agrosentinel.agrosentinel.dtos.TechnicianAvailabilityResponse;
 import com.agrosentinel.agrosentinel.services.PreventiveMaintenanceService;
 
 import jakarta.validation.Valid;
@@ -38,6 +39,11 @@ public class PreventiveMaintenanceController {
     @GetMapping("/{id}")
     public PreventiveMaintenanceResponse findById(@PathVariable Long id, Authentication authentication) {
         return maintenanceService.findById(id, authentication);
+    }
+
+    @GetMapping("/technicians/availability")
+    public List<TechnicianAvailabilityResponse> findTechnicianAvailability(Authentication authentication) {
+        return maintenanceService.findTechnicianAvailability(authentication);
     }
 
     @PostMapping

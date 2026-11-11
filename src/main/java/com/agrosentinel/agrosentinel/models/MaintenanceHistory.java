@@ -8,6 +8,7 @@ import java.util.List;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -85,6 +86,9 @@ public class MaintenanceHistory {
     @Column(name = "work_minutes")
     private Integer workMinutes;
 
+    @Column(name = "horometer_at_maintenance", precision = 12, scale = 2)
+    private BigDecimal horometerAtMaintenance;
+
     @Column(name = "tests_performed", columnDefinition = "text")
     private String testsPerformed;
 
@@ -101,9 +105,23 @@ public class MaintenanceHistory {
     @Column(name = "received_by", length = 160)
     private String receivedBy;
 
+    @Column(name = "review_observations", columnDefinition = "text")
+    private String reviewObservations;
+
+    @Column(name = "reviewed_by", length = 160)
+    private String reviewedBy;
+
+    @Column(name = "reviewed_at")
+    private LocalDateTime reviewedAt;
+
     @ElementCollection
     @CollectionTable(name = "maintenance_history_parts", joinColumns = @JoinColumn(name = "maintenance_history_id"))
     private List<MaintenancePart> parts = new ArrayList<>();
+
+    @ElementCollection
+    @CollectionTable(name = "maintenance_history_evidence", joinColumns = @JoinColumn(name = "maintenance_history_id"))
+    @Column(name = "url", nullable = false, length = 500)
+    private List<String> evidences = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40, columnDefinition = "varchar(40) not null default 'COMPLETED'")

@@ -39,5 +39,9 @@ public record MaintenanceHistoryResponse(
         String pendingTasks,
         String receivedBy,
         Long assetId,
-        String assetName) {
+        String assetName,
+        String reviewObservations,
+        String reviewedBy,
+        LocalDateTime reviewedAt,
+        BigDecimal horometerAtMaintenance) {
 }
