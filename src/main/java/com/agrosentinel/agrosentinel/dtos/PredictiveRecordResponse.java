@@ -16,6 +16,7 @@ public record PredictiveRecordResponse(
         int predictionClass,
         String tipoFallaPredicha,
         String fallaRealConfirmada,
+        boolean guardarParaReentrenamiento,
         String motorState,
         double confidence,
         String affectedComponents,

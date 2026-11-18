@@ -12,6 +12,9 @@ public record PredictiveFeedbackRequest(
         @JsonProperty("falla_real_confirmada")
         @JsonAlias("fallaRealConfirmada")
         @NotBlank @Size(max = 120) String fallaRealConfirmada,
+        @JsonProperty("guardar_para_reentrenamiento")
+        @JsonAlias("guardarParaReentrenamiento")
+        Boolean guardarParaReentrenamiento,
         @JsonProperty("machine_id")
         @JsonAlias("machineId")
         String machineId,

@@ -549,12 +549,7 @@ public class FailureReportService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
                         "El técnico seleccionado debe estar activo y pertenecer al grupo con rol de técnico"));
-        Usuario technician = lockTechnician(candidate);
-        if (activeWorkload(technician) >= TECHNICIAN_WORKLOAD_CAPACITY) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT, "El técnico seleccionado alcanzó su máximo de 3 trabajos activos");
-        }
-        return technician;
+        return lockTechnician(candidate);
     }
 
     private Usuario lockTechnician(Usuario technician) {
@@ -655,6 +650,7 @@ public class FailureReportService {
                 report.getFechaEnvioCierre(),
                 report.getFechaInicioRevision() == null || report.getFechaCierre() == null
                         ? null
-                        : Duration.between(report.getFechaInicioRevision(), report.getFechaCierre()).toMinutes());
+                        : Duration.between(report.getFechaInicioRevision(), report.getFechaCierre()).toMinutes(),
+                report.getAsset().getLocation());
     }
 }

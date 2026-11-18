@@ -228,7 +228,8 @@ public class WorkGroupService {
                 activeWorkload,
                 TECHNICIAN_WORKLOAD_CAPACITY,
                 technician && !Boolean.FALSE.equals(member.getActivo())
-                        && activeWorkload < TECHNICIAN_WORKLOAD_CAPACITY);
+                        && activeWorkload < TECHNICIAN_WORKLOAD_CAPACITY,
+                !Boolean.FALSE.equals(member.getActivo()));
     }
 
 }

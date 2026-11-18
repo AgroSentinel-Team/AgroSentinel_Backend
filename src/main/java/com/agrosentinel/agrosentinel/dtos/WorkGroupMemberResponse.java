@@ -11,5 +11,6 @@ public record WorkGroupMemberResponse(
         boolean lider,
         long activeWorkload,
         int workloadCapacity,
-        boolean available) {
+        boolean available,
+        boolean active) {
 }

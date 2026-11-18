@@ -14,6 +14,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import tools.jackson.databind.ObjectMapper;
 
+import com.agrosentinel.agrosentinel.dtos.PredictiveFeedbackRequest;
 import com.agrosentinel.agrosentinel.dtos.PredictiveRecordRequest;
 import com.agrosentinel.agrosentinel.dtos.PredictiveRecordResponse;
 import com.agrosentinel.agrosentinel.models.Asset;
@@ -50,6 +51,7 @@ class PredictiveServiceTest {
         assertEquals("Dos de tres modelos coinciden en Overheating.", response.razonConfianza());
         String responseJson = new ObjectMapper().writeValueAsString(response);
         assertTrue(responseJson.contains("\"tendenciaLstm\":\"Overheating\""));
+        assertTrue(responseJson.contains("\"guardarParaReentrenamiento\":false"));
         assertTrue(responseJson.contains("\"confianzaLstm\":0.87"));
         assertTrue(responseJson.contains("\"razonConfianza\":\"Dos de tres modelos coinciden en Overheating.\""));
     }
@@ -69,5 +71,26 @@ class PredictiveServiceTest {
         assertEquals("Vibration Issue", request.tendenciaLstm());
         assertEquals(0.76, request.confianzaLstm());
         assertEquals("Dos de tres modelos coinciden.", request.razonConfianza());
+    }
+
+    @Test
+    void feedbackRequestAcceptsRetrainingFlagAndLeavesOmittedValueForDefaulting() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        PredictiveFeedbackRequest explicitOptOut = mapper.readValue(
+                """
+                {
+                  "fallaRealConfirmada": "Normal",
+                  "guardarParaReentrenamiento": false
+                }
+                """,
+                PredictiveFeedbackRequest.class);
+        PredictiveFeedbackRequest omittedFlag = mapper.readValue(
+                """
+                {"falla_real_confirmada": "Overheating"}
+                """,
+                PredictiveFeedbackRequest.class);
+
+        assertEquals(false, explicitOptOut.guardarParaReentrenamiento());
+        assertEquals(null, omittedFlag.guardarParaReentrenamiento());
     }
 }

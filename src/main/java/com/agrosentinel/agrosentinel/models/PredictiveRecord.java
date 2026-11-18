@@ -63,6 +63,9 @@ public class PredictiveRecord {
     @Column(name = "falla_real_confirmada")
     private String fallaRealConfirmada;
 
+    @Column(name = "guardar_para_reentrenamiento", nullable = false)
+    private boolean guardarParaReentrenamiento;
+
     @Column(name = "motor_state", nullable = false)
     private String motorState;
 

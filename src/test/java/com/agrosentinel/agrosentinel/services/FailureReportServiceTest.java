@@ -160,7 +160,7 @@ class FailureReportServiceTest {
     }
 
     @Test
-    void rejectsManualAssignmentWhenTechnicianReachedCapacity() {
+    void allowsManualAssignmentWhenTechnicianReachedCapacity() {
         FailureReportRepository reportRepository = mock(FailureReportRepository.class);
         AssetRepository assetRepository = mock(AssetRepository.class);
         UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
@@ -188,15 +188,15 @@ class FailureReportServiceTest {
                 mock(MaintenanceHistoryRepository.class), mock(FailureEvidenceStorageService.class),
                 userRoleService, mock(AssetService.class));
 
-        var exception = org.junit.jupiter.api.Assertions.assertThrows(
-                org.springframework.web.server.ResponseStatusException.class,
-                () -> service.create(
-                        new FailureReportRequest(
-                                7L, "Falla mecánica", FailurePriority.MEDIA, "Descripción de prueba", 5L, 2L),
-                        null,
-                        authentication(supervisor.getEmail(), "ROLE_SUPERVISOR")));
+        when(reportRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertEquals(org.springframework.http.HttpStatus.CONFLICT, exception.getStatusCode());
+        var response = service.create(
+                new FailureReportRequest(
+                        7L, "Falla mecánica", FailurePriority.MEDIA, "Descripción de prueba", 5L, 2L),
+                null,
+                authentication(supervisor.getEmail(), "ROLE_SUPERVISOR"));
+
+        assertEquals(2L, response.assignedTechnicianId());
     }
 
     @Test

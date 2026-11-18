@@ -29,5 +29,6 @@ public record FailureReportResponse(
         LocalDateTime fechaAsignacion,
         LocalDateTime fechaCierre,
         LocalDateTime fechaEnvioCierre,
-        Long repairDurationMinutes) {
+        Long repairDurationMinutes,
+        String assetLocation) {
 }

@@ -62,6 +62,7 @@ public class PredictiveService {
         record.setMachineStatus(request.machineStatus());
         record.setPredictionClass(request.predictionClass());
         record.setTipoFallaPredicha(request.tipoFallaPredicha());
+        record.setGuardarParaReentrenamiento(false);
         record.setMotorState(request.motorState());
         record.setConfidence(request.confidence());
         record.setAffectedComponents(request.affectedComponents());
@@ -93,6 +94,8 @@ public class PredictiveService {
         PredictiveRecord record = predictiveRecordRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "No se encontró la lectura predictiva"));
+        boolean guardarParaReentrenamiento = request.guardarParaReentrenamiento() == null
+                || request.guardarParaReentrenamiento();
 
         try {
             RestClient.create(predictiveApiUrl)
@@ -100,7 +103,10 @@ public class PredictiveService {
                     .uri("/historial/{id}/feedback", record.getId())
                     .header("X-Predictive-Token", apiToken)
                     .body(new PredictiveFeedbackRequest(
-                            request.fallaRealConfirmada(), record.getMachineId(), record.getTimestamp()))
+                            request.fallaRealConfirmada(),
+                            guardarParaReentrenamiento,
+                            record.getMachineId(),
+                            record.getTimestamp()))
                     .retrieve()
                     .toBodilessEntity();
         } catch (RestClientException error) {
@@ -111,6 +117,7 @@ public class PredictiveService {
         }
 
         record.setFallaRealConfirmada(request.fallaRealConfirmada().trim());
+        record.setGuardarParaReentrenamiento(guardarParaReentrenamiento);
         return toResponse(predictiveRecordRepository.save(record));
     }
 
@@ -138,7 +145,8 @@ public class PredictiveService {
                 record.getId(), record.getAsset().getId(), record.getMachineId(), record.getTimestamp(),
                 record.getTemperature(), record.getVibration(), record.getHumidity(), record.getPressure(),
                 record.getEnergyConsumption(), record.getMachineStatus(), record.getPredictionClass(),
-                record.getTipoFallaPredicha(), record.getFallaRealConfirmada(), record.getMotorState(),
+                record.getTipoFallaPredicha(), record.getFallaRealConfirmada(),
+                record.isGuardarParaReentrenamiento(), record.getMotorState(),
                 record.getConfidence(), record.getAffectedComponents(), record.getTendenciaLstm(),
                 record.getConfianzaLstm(), record.getRazonConfianza());
     }
