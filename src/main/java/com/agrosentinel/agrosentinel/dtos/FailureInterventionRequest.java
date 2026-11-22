@@ -1,6 +1,7 @@
 package com.agrosentinel.agrosentinel.dtos;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.math.BigDecimal;
 
@@ -30,7 +31,31 @@ public record FailureInterventionRequest(
         @Size(max = 5000) String pendingTasks,
         @NotBlank @Size(max = 160) String technicianName,
         @Size(max = 160) String receivedBy,
-        @DecimalMin("0.0") @Digits(integer = 10, fraction = 2) BigDecimal horometerReading) {
+        @DecimalMin("0.0") @Digits(integer = 10, fraction = 2) BigDecimal horometerReading,
+        /** Hora real en que el técnico terminó (puede llegar tarde si estaba sin internet). */
+        OffsetDateTime completedAt) {
+
+    public FailureInterventionRequest(
+            String equipmentIntervened,
+            String initialReportedSymptom,
+            LocalDateTime reportedAt,
+            LocalDateTime inspectionStartedAt,
+            String actualFailure,
+            String rootCause,
+            String tasksPerformed,
+            List<@Valid MaintenancePartRequest> replacedParts,
+            Integer workMinutes,
+            String testsPerformed,
+            EquipmentFinalState finalEquipmentState,
+            String recommendations,
+            String pendingTasks,
+            String technicianName,
+            String receivedBy,
+            BigDecimal horometerReading) {
+        this(equipmentIntervened, initialReportedSymptom, reportedAt, inspectionStartedAt, actualFailure, rootCause,
+                tasksPerformed, replacedParts, workMinutes, testsPerformed, finalEquipmentState, recommendations,
+                pendingTasks, technicianName, receivedBy, horometerReading, null);
+    }
 
     public FailureInterventionRequest(
             String equipmentIntervened,
@@ -50,6 +75,6 @@ public record FailureInterventionRequest(
             String receivedBy) {
         this(equipmentIntervened, initialReportedSymptom, reportedAt, inspectionStartedAt, actualFailure, rootCause,
                 tasksPerformed, replacedParts, workMinutes, testsPerformed, finalEquipmentState, recommendations,
-                pendingTasks, technicianName, receivedBy, null);
+                pendingTasks, technicianName, receivedBy, null, null);
     }
 }

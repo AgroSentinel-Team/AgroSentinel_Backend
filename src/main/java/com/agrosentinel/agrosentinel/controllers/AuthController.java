@@ -1,6 +1,7 @@
 package com.agrosentinel.agrosentinel.controllers;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -15,9 +16,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.agrosentinel.agrosentinel.dtos.LoginRequest;
+import com.agrosentinel.agrosentinel.dtos.RefreshTokenRequest;
 import com.agrosentinel.agrosentinel.models.Usuario;
 import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
 import com.agrosentinel.agrosentinel.services.JwtService;
+import com.agrosentinel.agrosentinel.services.RefreshTokenService;
 import com.agrosentinel.agrosentinel.services.UserRoleService;
 
 @RestController
@@ -38,6 +42,9 @@ public class AuthController {
     @Autowired
     private UserRoleService userRoleService;
 
+    @Autowired
+    private RefreshTokenService refreshTokenService;
+
     @PostMapping("/registro")
     public ResponseEntity<?> registrarUsuario(@RequestBody Usuario usuario) {
         if (usuario.getRol() == null || !SELF_REGISTERABLE_ROLES.contains(usuario.getRol())) {
@@ -55,23 +62,47 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Usuario loginRequest) {
-        Usuario usuario = usuarioRepository.findByEmail(loginRequest.getEmail());
+    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
+        String email = loginRequest == null || loginRequest.email() == null ? null : loginRequest.email().trim();
+        Usuario usuario = email == null || email.isEmpty() ? null : usuarioRepository.findByEmail(email);
         if (usuario == null || Boolean.FALSE.equals(usuario.getActivo())
-                || loginRequest.getPassword() == null
-                || !passwordEncoder.matches(loginRequest.getPassword(), usuario.getPassword())) {
+                || loginRequest.password() == null
+                || !passwordEncoder.matches(loginRequest.password(), usuario.getPassword())) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Error: Credenciales incorrectas");
         }
 
-        String token = jwtService.createToken(usuario);
         usuario.setUltimoAcceso(LocalDateTime.now());
         usuarioRepository.save(usuario);
+        return ResponseEntity.ok(sessionResponse(usuario, refreshTokenService.issue(usuario)));
+    }
 
-        return ResponseEntity.ok(Map.of(
-                "token", token,
-                "rol", usuario.getRol(),
-                "nombre", usuario.getNombre(),
-                "roles", userRoleService.getEffectiveRoles(usuario)));
+    /** Cambia un refresh token vigente por un token de acceso nuevo sin pedir la contraseña. */
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(@RequestBody(required = false) RefreshTokenRequest request) {
+        RefreshTokenService.IssuedToken issued = refreshTokenService.rotate(
+                request == null ? null : request.refreshToken());
+        Usuario usuario = issued.user();
+        usuario.setUltimoAcceso(LocalDateTime.now());
+        usuarioRepository.save(usuario);
+        return ResponseEntity.ok(sessionResponse(usuario, issued));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@RequestBody(required = false) RefreshTokenRequest request) {
+        refreshTokenService.revoke(request == null ? null : request.refreshToken());
+        return ResponseEntity.noContent().build();
+    }
+
+    private Map<String, Object> sessionResponse(Usuario usuario, RefreshTokenService.IssuedToken refreshToken) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("token", jwtService.createToken(usuario));
+        body.put("rol", usuario.getRol());
+        body.put("nombre", usuario.getNombre());
+        body.put("email", usuario.getEmail());
+        body.put("roles", userRoleService.getEffectiveRoles(usuario));
+        body.put("refreshToken", refreshToken.value());
+        body.put("refreshTokenExpiresAt", refreshToken.expiresAt().toString());
+        return body;
     }
 
     @GetMapping("/me")

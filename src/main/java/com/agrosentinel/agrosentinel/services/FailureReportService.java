@@ -255,6 +255,12 @@ public class FailureReportService {
 
     @Transactional
     public FailureReportResponse startReview(Long id, Authentication authentication) {
+        return startReview(id, null, authentication);
+    }
+
+    @Transactional
+    public FailureReportResponse startReview(Long id, java.time.OffsetDateTime clientStartedAt,
+            Authentication authentication) {
         FailureReport report = requireAssignedReport(id, authentication);
         if (report.getEstado() == FailureStatus.EN_EJECUCION) {
             return toResponse(report);
@@ -265,7 +271,7 @@ public class FailureReportService {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT, "La orden solo puede iniciar desde el estado Asignada");
         }
-        LocalDateTime startedAt = LocalDateTime.now();
+        LocalDateTime startedAt = ClientTimestamps.resolve(clientStartedAt);
         report.setFechaInicioRevision(startedAt);
         report.setEstado(FailureStatus.EN_EJECUCION);
         report.getAsset().setOperationalStatus(OperationalStatus.IN_REPAIR);
@@ -288,7 +294,7 @@ public class FailureReportService {
             report.getAsset().setOperationalStatus(OperationalStatus.IN_REPAIR);
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = ClientTimestamps.resolve(request.completedAt());
         if (report.getFechaInicioRevision() == null) {
             report.setFechaInicioRevision(now);
         }

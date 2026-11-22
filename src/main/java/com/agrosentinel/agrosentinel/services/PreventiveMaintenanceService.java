@@ -206,12 +206,15 @@ public class PreventiveMaintenanceService {
         if (!request.confirmed()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Confirma la veracidad de los datos para firmar");
         }
-        if (request.nextMaintenanceDate() != null && request.nextMaintenanceDate().isBefore(LocalDate.now())) {
+        // Se valida contra el día en que se hizo el trabajo, no contra el día en que llegó
+        // al servidor: una ejecución hecha offline puede sincronizarse días después.
+        LocalDateTime executedAt = ClientTimestamps.resolve(request.executedAt());
+        if (request.nextMaintenanceDate() != null
+                && request.nextMaintenanceDate().isBefore(executedAt.toLocalDate())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La próxima fecha debe ser hoy o una fecha futura");
         }
         updateHorometer(maintenance.getAsset(), request.horometerReading());
 
-        LocalDateTime executedAt = LocalDateTime.now();
         LocalDate nextDate = request.nextMaintenanceDate() != null
                 ? request.nextMaintenanceDate()
                 : executedAt.toLocalDate().plusDays(maintenance.getAsset().getCategory().getMaintenanceFrequencyDays());

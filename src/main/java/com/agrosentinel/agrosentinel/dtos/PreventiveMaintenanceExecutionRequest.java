@@ -1,6 +1,7 @@
 package com.agrosentinel.agrosentinel.dtos;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.math.BigDecimal;
 
@@ -22,7 +23,22 @@ public record PreventiveMaintenanceExecutionRequest(
         @NotNull MaintenanceOutcome outcome,
         LocalDate nextMaintenanceDate,
         boolean confirmed,
-        @DecimalMin("0.0") @Digits(integer = 10, fraction = 2) BigDecimal horometerReading) {
+        @DecimalMin("0.0") @Digits(integer = 10, fraction = 2) BigDecimal horometerReading,
+        /** Hora real de la ejecución (puede llegar tarde si estaba sin internet). */
+        OffsetDateTime executedAt) {
+
+    public PreventiveMaintenanceExecutionRequest(
+            List<@Valid PreventiveMaintenanceTaskRequest> tasks,
+            String replacedParts,
+            String workDescription,
+            String technicianNotes,
+            MaintenanceOutcome outcome,
+            LocalDate nextMaintenanceDate,
+            boolean confirmed,
+            BigDecimal horometerReading) {
+        this(tasks, replacedParts, workDescription, technicianNotes, outcome, nextMaintenanceDate, confirmed,
+                horometerReading, null);
+    }
 
     public PreventiveMaintenanceExecutionRequest(
             List<@Valid PreventiveMaintenanceTaskRequest> tasks,
@@ -32,6 +48,7 @@ public record PreventiveMaintenanceExecutionRequest(
             MaintenanceOutcome outcome,
             LocalDate nextMaintenanceDate,
             boolean confirmed) {
-        this(tasks, replacedParts, workDescription, technicianNotes, outcome, nextMaintenanceDate, confirmed, null);
+        this(tasks, replacedParts, workDescription, technicianNotes, outcome, nextMaintenanceDate, confirmed, null,
+                null);
     }
 }

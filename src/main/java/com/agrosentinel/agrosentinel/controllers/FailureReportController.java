@@ -23,6 +23,7 @@ import com.agrosentinel.agrosentinel.dtos.FailureReportResponse;
 import com.agrosentinel.agrosentinel.dtos.FailureReportCloseRequest;
 import com.agrosentinel.agrosentinel.dtos.AssetResumeResponse;
 import com.agrosentinel.agrosentinel.dtos.MaintenanceHistoryResponse;
+import com.agrosentinel.agrosentinel.dtos.StartReviewRequest;
 import com.agrosentinel.agrosentinel.services.FailureReportService;
 
 import jakarta.validation.Valid;
@@ -74,8 +75,11 @@ public class FailureReportController {
     }
 
     @PostMapping("/{id}/start-review")
-    public FailureReportResponse startReview(@PathVariable Long id, Authentication authentication) {
-        return failureReportService.startReview(id, authentication);
+    public FailureReportResponse startReview(
+            @PathVariable Long id,
+            @RequestBody(required = false) StartReviewRequest request,
+            Authentication authentication) {
+        return failureReportService.startReview(id, request == null ? null : request.startedAt(), authentication);
     }
 
     @PutMapping(value = "/{id}/intervention", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

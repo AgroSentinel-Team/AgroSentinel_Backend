@@ -13,12 +13,14 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
+import com.agrosentinel.agrosentinel.services.ClientOperationService;
 import com.agrosentinel.agrosentinel.services.JwtService;
 import com.agrosentinel.agrosentinel.services.UserRoleService;
 
@@ -33,7 +35,8 @@ public class SecurityConfig {
             HttpSecurity http,
             JwtService jwtService,
             UsuarioRepository usuarioRepository,
-            UserRoleService userRoleService) throws Exception {
+            UserRoleService userRoleService,
+            ClientOperationService clientOperationService) throws Exception {
         http
             .cors(Customizer.withDefaults())
             .csrf(csrf -> csrf.disable())
@@ -106,7 +109,9 @@ public class SecurityConfig {
                 }))
             .addFilterBefore(
                 new JwtAuthenticationFilter(jwtService, usuarioRepository, userRoleService),
-                UsernamePasswordAuthenticationFilter.class);
+                UsernamePasswordAuthenticationFilter.class)
+            // Después de autorizar: reintentos de la cola offline sin duplicar operaciones.
+            .addFilterAfter(new IdempotencyFilter(clientOperationService), AuthorizationFilter.class);
         return http.build();
     }
 
