@@ -16,6 +16,10 @@ public interface AssetRepository extends JpaRepository<Asset, Long> {
 	@Query("select a from Asset a where a.hasMotor = true and a.isActive = true")
 	List<Asset> findActiveMotorAssets();
 
+	List<Asset> findAllBySerialNumberIgnoreCase(String serialNumber);
+
+	List<Asset> findAllByInventoryCodeIgnoreCase(String inventoryCode);
+
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select asset from Asset asset where asset.id = :id")
 	Optional<Asset> findByIdForUpdate(@Param("id") Long id);

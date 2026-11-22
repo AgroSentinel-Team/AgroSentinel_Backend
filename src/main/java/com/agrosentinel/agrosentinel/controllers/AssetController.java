@@ -15,10 +15,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.agrosentinel.agrosentinel.dtos.AssetDuplicateResponse;
 import com.agrosentinel.agrosentinel.dtos.AssetRequest;
 import com.agrosentinel.agrosentinel.dtos.AssetResponse;
 import com.agrosentinel.agrosentinel.dtos.AssetFailureTrendResponse;
@@ -38,6 +40,14 @@ public class AssetController {
     @GetMapping
     public List<AssetResponse> findAll() {
         return assetService.findAll();
+    }
+
+    @GetMapping("/duplicates")
+    public AssetDuplicateResponse findDuplicates(
+            @RequestParam(required = false) String serialNumber,
+            @RequestParam(required = false) String inventoryCode,
+            @RequestParam(required = false) Long excludeId) {
+        return assetService.findDuplicates(serialNumber, inventoryCode, excludeId);
     }
 
     @GetMapping("/assigned")

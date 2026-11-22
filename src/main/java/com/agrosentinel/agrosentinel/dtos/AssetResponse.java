@@ -2,8 +2,9 @@ package com.agrosentinel.agrosentinel.dtos;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.math.BigDecimal;
+import java.util.List;
 
+import com.agrosentinel.agrosentinel.models.InventoryCodeStatus;
 import com.agrosentinel.agrosentinel.models.OperationalStatus;
 
 public record AssetResponse(
@@ -28,5 +29,11 @@ public record AssetResponse(
         boolean hasMotor,
         String predictiveId,
         String imageUrl,
-        BigDecimal currentHorometer) {
+        BigDecimal currentHorometer,
+        String equipmentType,
+        Integer manufactureYear,
+        InventoryCodeStatus inventoryCodeStatus,
+        List<AssetSpecificationResponse> specifications,
+        int completeness,
+        List<String> missingFields) {
 }

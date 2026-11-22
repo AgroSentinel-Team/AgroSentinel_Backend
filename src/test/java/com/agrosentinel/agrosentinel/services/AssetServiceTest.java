@@ -26,6 +26,7 @@ import com.agrosentinel.agrosentinel.models.OperationalStatus;
 import com.agrosentinel.agrosentinel.models.Usuario;
 import com.agrosentinel.agrosentinel.repositories.AssetRepository;
 import com.agrosentinel.agrosentinel.repositories.CategoryRepository;
+import com.agrosentinel.agrosentinel.repositories.CategorySpecFieldRepository;
 import com.agrosentinel.agrosentinel.repositories.MaintenanceHistoryRepository;
 import com.agrosentinel.agrosentinel.repositories.PreventiveMaintenanceRepository;
 import com.agrosentinel.agrosentinel.repositories.UsuarioRepository;
@@ -53,7 +54,8 @@ class AssetServiceTest {
                 .thenReturn(List.of(third, second, first));
         AssetService service = new AssetService(
                 assetRepository, categoryRepository, usuarioRepository, historyRepository, maintenanceRepository,
-                mock(AssetImageStorageService.class));
+                mock(AssetImageStorageService.class),
+                new AssetSpecificationService(categoryRepository, mock(CategorySpecFieldRepository.class)));
 
         var trends = service.getFailureTrends(7L);
 
@@ -108,7 +110,8 @@ class AssetServiceTest {
 
         AssetService service = new AssetService(
                 assetRepository, categoryRepository, usuarioRepository, historyRepository, maintenanceRepository,
-                mock(AssetImageStorageService.class));
+                mock(AssetImageStorageService.class),
+                new AssetSpecificationService(categoryRepository, mock(CategorySpecFieldRepository.class)));
 
         var firstResume = service.getResume(7L);
         var secondResume = service.getResume(7L);

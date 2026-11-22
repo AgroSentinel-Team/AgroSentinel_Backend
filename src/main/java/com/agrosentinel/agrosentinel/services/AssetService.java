@@ -1,6 +1,7 @@
 package com.agrosentinel.agrosentinel.services;
 
 import java.time.LocalDateTime;
+import java.time.Year;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.agrosentinel.agrosentinel.dtos.AssetDuplicateResponse;
 import com.agrosentinel.agrosentinel.dtos.AssetRequest;
 import com.agrosentinel.agrosentinel.dtos.AssetFailureTrendResponse;
 import com.agrosentinel.agrosentinel.dtos.AssetResponse;
@@ -20,6 +22,8 @@ import com.agrosentinel.agrosentinel.dtos.MaintenanceHistoryResponse;
 import com.agrosentinel.agrosentinel.dtos.MaintenancePartResponse;
 import com.agrosentinel.agrosentinel.models.Asset;
 import com.agrosentinel.agrosentinel.models.Category;
+import com.agrosentinel.agrosentinel.models.CategorySpecField;
+import com.agrosentinel.agrosentinel.models.InventoryCodeStatus;
 import com.agrosentinel.agrosentinel.models.MaintenanceHistory;
 import com.agrosentinel.agrosentinel.models.MaintenanceHistoryStatus;
 import com.agrosentinel.agrosentinel.models.MaintenanceType;
@@ -44,16 +48,41 @@ public class AssetService {
     private final MaintenanceHistoryRepository maintenanceHistoryRepository;
     private final PreventiveMaintenanceRepository preventiveMaintenanceRepository;
     private final AssetImageStorageService assetImageStorageService;
+    private final AssetSpecificationService specificationService;
 
     public List<AssetResponse> findAll() {
-        return assetRepository.findAll().stream().map(this::toResponse).toList();
+        Map<Long, List<CategorySpecField>> templates = specificationService.templatesByCategory();
+        return assetRepository.findAll().stream()
+                .map(asset -> toResponse(asset, templates.getOrDefault(asset.getCategory().getId(), List.of())))
+                .toList();
     }
 
     public List<AssetResponse> findAssignedToUser(String email) {
+        Map<Long, List<CategorySpecField>> templates = specificationService.templatesByCategory();
         return assetRepository.findAll().stream()
                 .filter(Asset::isActive)
                 .filter(asset -> email.equalsIgnoreCase(asset.getResponsible().getEmail()))
-                .map(this::toResponse)
+                .map(asset -> toResponse(asset, templates.getOrDefault(asset.getCategory().getId(), List.of())))
+                .toList();
+    }
+
+    /**
+     * Activos que ya usan el serial o el código de inventario indicados. No bloquea el registro:
+     * sirve para advertir al usuario antes de guardar.
+     */
+    public AssetDuplicateResponse findDuplicates(String serialNumber, String inventoryCode, Long excludeId) {
+        return new AssetDuplicateResponse(
+                duplicateMatches(isBlank(serialNumber) ? List.of()
+                        : assetRepository.findAllBySerialNumberIgnoreCase(serialNumber.trim()), excludeId),
+                duplicateMatches(isBlank(inventoryCode) ? List.of()
+                        : assetRepository.findAllByInventoryCodeIgnoreCase(inventoryCode.trim()), excludeId));
+    }
+
+    private List<AssetDuplicateResponse.Match> duplicateMatches(List<Asset> assets, Long excludeId) {
+        return assets.stream()
+                .filter(asset -> excludeId == null || !excludeId.equals(asset.getId()))
+                .map(asset -> new AssetDuplicateResponse.Match(asset.getId(), asset.getName(),
+                        asset.getSerialNumber(), asset.getInventoryCode()))
                 .toList();
     }
 
@@ -203,15 +232,20 @@ public class AssetService {
     }
 
     private void applyRequest(Asset asset, AssetRequest request) {
-        asset.setName(request.name());
-        asset.setBrand(request.brand());
-        asset.setModel(request.model());
-        asset.setSerialNumber(request.serialNumber());
-        asset.setInventoryCode(request.inventoryCode() == null || request.inventoryCode().isBlank()
-                ? null
-                : request.inventoryCode().trim());
+        asset.setName(request.name().trim());
+        asset.setBrand(blankToNull(request.brand()));
+        asset.setModel(blankToNull(request.model()));
+        asset.setSerialNumber(blankToNull(request.serialNumber()));
+        asset.setInventoryCode(blankToNull(request.inventoryCode()));
+        asset.setInventoryCodeStatus(resolveInventoryCodeStatus(asset.getInventoryCode(), request.inventoryCodeStatus()));
+        asset.setEquipmentType(blankToNull(request.equipmentType()));
+        asset.setManufactureYear(validateYear(request.manufactureYear()));
         asset.setExtraSpecifications(request.extraSpecifications());
         asset.setCategory(findCategory(request.categoryId()));
+        if (request.specifications() != null) {
+            specificationService.applySpecifications(asset, request.specifications(),
+                    specificationService.templateFor(asset.getCategory().getId()));
+        }
         asset.setResponsible(findResponsible(request.responsibleId()));
         asset.setAcquisitionDate(request.acquisitionDate());
         asset.setAcquisitionCost(request.acquisitionCost());
@@ -227,6 +261,36 @@ public class AssetService {
         if (request.hasMotor() != null) {
             asset.setHasMotor(request.hasMotor());
         }
+    }
+
+    /** Con código registrado siempre es ASSIGNED; sin código, PENDING salvo que se indique NOT_PROVIDED. */
+    static InventoryCodeStatus resolveInventoryCodeStatus(String inventoryCode, InventoryCodeStatus requested) {
+        if (!isBlank(inventoryCode)) {
+            return InventoryCodeStatus.ASSIGNED;
+        }
+        return requested == InventoryCodeStatus.NOT_PROVIDED
+                ? InventoryCodeStatus.NOT_PROVIDED
+                : InventoryCodeStatus.PENDING;
+    }
+
+    private static Integer validateYear(Integer year) {
+        if (year == null) {
+            return null;
+        }
+        int maxYear = Year.now().getValue() + 1;
+        if (year < 1900 || year > maxYear) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El año de fabricación debe estar entre 1900 y " + maxYear);
+        }
+        return year;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private static String blankToNull(String value) {
+        return isBlank(value) ? null : value.trim();
     }
 
     private Asset findAsset(Long id) {
@@ -245,6 +309,11 @@ public class AssetService {
     }
 
     private AssetResponse toResponse(Asset asset) {
+        return toResponse(asset, specificationService.templateFor(asset.getCategory().getId()));
+    }
+
+    private AssetResponse toResponse(Asset asset, List<CategorySpecField> template) {
+        AssetSpecificationService.Completeness completeness = specificationService.completeness(asset, template);
         return new AssetResponse(
                 asset.getId(), asset.getName(), asset.getBrand(), asset.getModel(), asset.getSerialNumber(),
                 asset.getInventoryCode(), asset.getExtraSpecifications(), asset.getCategory().getId(), asset.getCategory().getName(),
@@ -252,7 +321,10 @@ public class AssetService {
                 asset.getAcquisitionCost(), asset.getProvider(), asset.getWarrantyExpirationDate(),
                 asset.getLocation(), asset.getOperationalStatus(), asset.isActive(), asset.isHasMotor(),
                 asset.isHasMotor() ? "MOTOR-" + asset.getId() : null, asset.getImageUrl(),
-                asset.getCurrentHorometer() == null ? java.math.BigDecimal.ZERO : asset.getCurrentHorometer());
+                asset.getCurrentHorometer() == null ? java.math.BigDecimal.ZERO : asset.getCurrentHorometer(),
+                asset.getEquipmentType(), asset.getManufactureYear(), asset.getInventoryCodeStatus(),
+                specificationService.toResponses(asset, template), completeness.percent(),
+                completeness.missingFields());
     }
 
     public MaintenanceHistoryResponse toHistoryResponse(MaintenanceHistory history) {

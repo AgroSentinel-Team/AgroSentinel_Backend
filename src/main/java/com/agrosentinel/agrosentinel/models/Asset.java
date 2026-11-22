@@ -3,9 +3,13 @@ package com.agrosentinel.agrosentinel.models;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.SQLRestriction;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -16,6 +20,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.Getter;
@@ -40,11 +46,23 @@ public class Asset {
 
     private String model;
 
-    @Column(name = "serial_number", unique = true)
+    // No es único: los inventarios reales traen seriales repetidos y la aplicación solo advierte.
+    @Column(name = "serial_number")
     private String serialNumber;
 
     @Column(name = "inventory_code", length = 80)
     private String inventoryCode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "inventory_code_status", nullable = false, length = 20)
+    private InventoryCodeStatus inventoryCodeStatus = InventoryCodeStatus.ASSIGNED;
+
+    /** Tipo concreto de equipo dentro de la categoría, p. ej. "Guadaña" o "Rastra transportable". */
+    @Column(name = "equipment_type", length = 120)
+    private String equipmentType;
+
+    @Column(name = "manufacture_year")
+    private Integer manufactureYear;
 
     @Column(name = "extra_specifications", columnDefinition = "text")
     private String extraSpecifications;
@@ -89,10 +107,18 @@ public class Asset {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @OneToMany(mappedBy = "asset", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder ASC, id ASC")
+    @BatchSize(size = 64)
+    private List<AssetSpecification> specifications = new ArrayList<>();
+
     @PrePersist
     private void applyDefaults() {
         if (operationalStatus == null) {
             operationalStatus = OperationalStatus.OPERATIONAL;
+        }
+        if (inventoryCodeStatus == null) {
+            inventoryCodeStatus = InventoryCodeStatus.ASSIGNED;
         }
     }
 }
