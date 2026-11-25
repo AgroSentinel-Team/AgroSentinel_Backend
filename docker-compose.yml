@@ -8,6 +8,10 @@ services:
     restart: unless-stopped
     volumes:
       - failure_evidence:/app/uploads/failure-evidence
+      - maintenance_evidence:/app/uploads/maintenance-evidence
+      - asset_images:/app/uploads/asset-images
 
 volumes:
   failure_evidence:
+  maintenance_evidence:
+  asset_images:
