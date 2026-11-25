@@ -22,7 +22,9 @@ public class AgrosentinelApplication {
 						environment.getProperty("agrosentinel.demo-data.allowed-remote-database"));
 				DemoDataSeeder.requireRemotePasswordKeyIfNeeded(
 						environment.getProperty("spring.datasource.url"),
-						environment.getProperty("agrosentinel.demo-data.password-key"));
+						environment.getProperty("agrosentinel.demo-data.password-key"),
+						environment.getProperty(
+								"agrosentinel.demo-data.allow-weak-remote-passwords", Boolean.class, false));
 			}
 		});
 		application.run(args);

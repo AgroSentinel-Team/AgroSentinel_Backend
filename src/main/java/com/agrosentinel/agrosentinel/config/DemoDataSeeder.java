@@ -116,6 +116,9 @@ public class DemoDataSeeder implements ApplicationRunner {
     @Value("${agrosentinel.demo-data.emit-credentials:false}")
     private boolean emitCredentials;
 
+    @Value("${agrosentinel.demo-data.allow-weak-remote-passwords:false}")
+    private boolean allowWeakRemotePasswords;
+
     @Value("${agrosentinel.demo-data.password-key:}")
     private String remotePasswordKey;
 
@@ -126,10 +129,13 @@ public class DemoDataSeeder implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         requireAllowedDatasource(datasourceUrl, allowRemote, allowedRemoteHost, allowedRemoteDatabase);
         remoteDatasource = !isLocalDatasource(datasourceUrl);
-        requireRemotePasswordKeyIfNeeded(datasourceUrl, remotePasswordKey);
+        requireRemotePasswordKeyIfNeeded(datasourceUrl, remotePasswordKey, allowWeakRemotePasswords);
 
         if (!assetRepository.findAllByInventoryCodeIgnoreCase("25530003001").isEmpty()) {
-            LOGGER.info("La carga de maquinaria ya existe; no se modificaron usuarios ni datos existentes.");
+            if (remoteDatasource && allowWeakRemotePasswords) {
+                resetDemoAccountPasswords();
+            }
+            LOGGER.info("La carga de maquinaria ya existe; no se volvieron a insertar datos.");
             return;
         }
         if (hasExistingSeedData()) {
@@ -171,8 +177,37 @@ public class DemoDataSeeder implements ApplicationRunner {
                 || workGroupRepository.count() > 0;
     }
 
+    private void resetDemoAccountPasswords() {
+        resetAccountPassword("admin1@gmail.com", "admin1");
+        resetAccountPasswords("tecnico", TECHNICIAN_NAMES.length);
+        resetAccountPasswords("supervisor", SUPERVISOR_NAMES.length);
+        resetAccountPasswords("operario", OPERATOR_NAMES.length);
+        resetAccountPasswords("almacenista", STOREKEEPER_NAMES.length);
+    }
+
+    private void resetAccountPasswords(String prefix, int count) {
+        for (int number = 1; number <= count; number++) {
+            resetAccountPassword(prefix + number + "@gmail.com", prefix + number);
+        }
+    }
+
+    private void resetAccountPassword(String email, String rawPassword) {
+        Usuario user = usuarioRepository.findByEmail(email);
+        if (user == null) {
+            throw new IllegalStateException(
+                    "No se pudo actualizar la contraseña: falta la cuenta inicial " + email + ".");
+        }
+        user.setPassword(passwordEncoder.encode(rawPassword));
+        usuarioRepository.save(user);
+    }
+
     public static void requireRemotePasswordKeyIfNeeded(String datasourceUrl, String passwordKey) {
-        if (isLocalDatasource(datasourceUrl)) {
+        requireRemotePasswordKeyIfNeeded(datasourceUrl, passwordKey, false);
+    }
+
+    public static void requireRemotePasswordKeyIfNeeded(
+            String datasourceUrl, String passwordKey, boolean allowWeakRemotePasswords) {
+        if (isLocalDatasource(datasourceUrl) || allowWeakRemotePasswords) {
             return;
         }
         if (passwordKey == null || passwordKey.getBytes(StandardCharsets.UTF_8).length < 32) {
@@ -242,10 +277,11 @@ public class DemoDataSeeder implements ApplicationRunner {
         }
         user.setNombre(name);
         user.setRol(role);
-        if (!remoteDatasource || created) {
-            String password = remoteDatasource ? generatePassword(email) : rawPassword;
+        if (!remoteDatasource || created || allowWeakRemotePasswords) {
+            String password = accountPassword(
+                    remoteDatasource, allowWeakRemotePasswords, email, rawPassword, remotePasswordKey);
             user.setPassword(passwordEncoder.encode(password));
-            if (remoteDatasource) {
+            if (remoteDatasource && created && !allowWeakRemotePasswords) {
                 generatedPasswords.put(email, password);
             }
         }
@@ -255,6 +291,18 @@ public class DemoDataSeeder implements ApplicationRunner {
 
     private String generatePassword(String email) {
         return derivePassword(email, remotePasswordKey);
+    }
+
+    static String accountPassword(
+            boolean remoteDatasource,
+            boolean allowWeakRemotePasswords,
+            String email,
+            String rawPassword,
+            String passwordKey) {
+        if (remoteDatasource && !allowWeakRemotePasswords) {
+            return derivePassword(email, passwordKey);
+        }
+        return rawPassword;
     }
 
     static String derivePassword(String email, String passwordKey) {

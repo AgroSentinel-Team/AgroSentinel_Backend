@@ -16,7 +16,9 @@ La carga no elimina usuarios ni otros datos existentes. Crea o actualiza únicam
 
 ## Carga remota de una sola vez
 
-Solo después de confirmar el destino, usa las propiedades `agrosentinel.demo-data.allow-remote=true`, `agrosentinel.demo-data.allowed-remote-host` y `agrosentinel.demo-data.allowed-remote-database` con el host y la base exactos. La aplicación valida estos valores antes de conectarse. En una base remota, cada cuenta nueva recibe una contraseña distinta derivada con HMAC-SHA256 de una clave privada de al menos 32 bytes y su correo. La clave no se guarda en la base ni en el repositorio. Usa `tools/Get-DemoDataCredentials.ps1` localmente para derivar las credenciales; no habilites su emisión en logs de despliegue. Las contraseñas fijas de la tabla siguiente son exclusivamente para desarrollo local.
+Solo después de confirmar el destino, usa las propiedades `agrosentinel.demo-data.allow-remote=true`, `agrosentinel.demo-data.allowed-remote-host` y `agrosentinel.demo-data.allowed-remote-database` con el host y la base exactos. La aplicación valida estos valores antes de conectarse. En una base remota, cada cuenta nueva recibe una contraseña distinta derivada con HMAC-SHA256 de una clave privada de al menos 32 bytes y su correo. La clave no se guarda en la base ni en el repositorio. Usa `tools/Get-DemoDataCredentials.ps1` localmente para derivar las credenciales; no habilites su emisión en logs de despliegue.
+
+Para una instancia remota aislada de pruebas, `AGROSENTINEL_DEMO_DATA_ALLOW_WEAK_REMOTE_PASSWORDS=true` cambia las contraseñas de las cuentas iniciales a `admin1`, `tecnico1`–`tecnico5`, `supervisor1`–`supervisor5`, `operario1`–`operario20` y `almacenista1`–`almacenista3`. Esta opción es insegura y no debe usarse en una instancia pública o de operación. Si el activo marcador ya existe, el siguiente arranque actualiza las contraseñas de esas 34 cuentas; no elimina datos ni cambia otros usuarios. Desactiva la opción después de la prueba y restablece contraseñas seguras.
 
 ## Activar la carga durante el despliegue en Render
 
@@ -28,9 +30,10 @@ El `render.yaml` del frontend solo despliega el sitio estático. Para el servici
 | `AGROSENTINEL_DEMO_DATA_ALLOW_REMOTE` | `true` |
 | `AGROSENTINEL_DEMO_DATA_ALLOWED_REMOTE_HOST` | `aws-0-us-west-1.pooler.supabase.com` |
 | `AGROSENTINEL_DEMO_DATA_ALLOWED_REMOTE_DATABASE` | `postgres` |
-| `AGROSENTINEL_DEMO_DATA_PASSWORD_KEY` | Clave aleatoria de al menos 32 bytes, configurada como secreto |
+| `AGROSENTINEL_DEMO_DATA_PASSWORD_KEY` | Clave aleatoria de al menos 32 bytes; necesaria en modo remoto seguro |
+| `AGROSENTINEL_DEMO_DATA_ALLOW_WEAK_REMOTE_PASSWORDS` | `true` solo para la instancia de pruebas; establece contraseñas predecibles |
 
-Con el flag activo, el contenedor habilita el perfil `demo-data` y carga durante el arranque. La operación valida host y base antes de conectarse, no elimina tablas y se detiene si encuentra datos existentes sin el activo marcador. En reinicios o despliegues posteriores, si el marcador ya existe, no modifica usuarios ni vuelve a insertar registros.
+Con `AGROSENTINEL_DEMO_DATA_ENABLED=true`, el contenedor habilita el perfil `demo-data` y carga durante el arranque. La operación valida host y base antes de conectarse, no elimina tablas y se detiene si encuentra datos existentes sin el activo marcador. En reinicios o despliegues posteriores, si el marcador ya existe, no inserta de nuevo los datos. Si está activada la opción de contraseñas débiles, actualiza solamente las contraseñas de las 34 cuentas iniciales.
 
 Genera la clave localmente y guárdala en el panel de Render como secreto, sin compartirla ni agregarla al repositorio:
 

@@ -51,6 +51,9 @@ class DemoDataSeederTest {
         assertDoesNotThrow(() ->
                 DemoDataSeeder.requireRemotePasswordKeyIfNeeded(
                         "jdbc:postgresql://remote.example.com/demo", "0123456789abcdef0123456789abcdef"));
+        assertDoesNotThrow(() ->
+                DemoDataSeeder.requireRemotePasswordKeyIfNeeded(
+                        "jdbc:postgresql://remote.example.com/demo", null, true));
     }
 
     @Test
@@ -61,5 +64,19 @@ class DemoDataSeederTest {
         assertTrue(adminPassword.matches("[A-Za-z0-9_-]{43}"));
         assertEquals(adminPassword, DemoDataSeeder.derivePassword("ADMIN1@GMAIL.COM", key));
         assertNotEquals(adminPassword, DemoDataSeeder.derivePassword("tecnico1@gmail.com", key));
+    }
+
+    @Test
+    void allowsRequestedPredictablePasswordsOnlyWhenWeakRemoteModeIsExplicit() {
+        assertEquals(
+                "tecnico1",
+                DemoDataSeeder.accountPassword(true, true, "tecnico1@gmail.com", "tecnico1", null));
+        assertEquals(
+                "tecnico1",
+                DemoDataSeeder.accountPassword(false, false, "tecnico1@gmail.com", "tecnico1", null));
+        assertNotEquals(
+                "tecnico1",
+                DemoDataSeeder.accountPassword(
+                        true, false, "tecnico1@gmail.com", "tecnico1", "0123456789abcdef0123456789abcdef"));
     }
 }

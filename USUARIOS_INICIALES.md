@@ -1,8 +1,8 @@
 # Usuarios iniciales de AgroSentinel
 
-Este es el listado de las 34 cuentas preparadas para la carga inicial. **La carga remota aún no se ha ejecutado**, por lo que estas cuentas todavía no están creadas en la base de datos.
+Este es el listado de las 34 cuentas definidas para la carga inicial. Su existencia en la base depende de que el cargador haya terminado correctamente durante el despliegue.
 
-Las contraseñas no se incluyen en este archivo para evitar subir credenciales al repositorio. Al habilitar la carga remota, las cuentas nuevas reciben contraseñas fuertes derivadas de `AGROSENTINEL_DEMO_DATA_PASSWORD_KEY`. Después de la carga, ejecútese localmente `tools/Get-DemoDataCredentials.ps1` con la misma clave para obtener el listado de acceso. Guarda ese resultado fuera del repositorio.
+Las contraseñas no se incluyen en este archivo para evitar subir credenciales al repositorio. En modo remoto seguro se derivan de `AGROSENTINEL_DEMO_DATA_PASSWORD_KEY`. Para una instancia de pruebas se puede habilitar explícitamente `AGROSENTINEL_DEMO_DATA_ALLOW_WEAK_REMOTE_PASSWORDS=true`; esto establece contraseñas `tecnico1`, `supervisor1`, `operario1`, `almacenista1`, etc. No habilites esa opción en una instancia pública u operativa.
 
 ## Administrador
 
