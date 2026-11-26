@@ -59,7 +59,6 @@ import lombok.RequiredArgsConstructor;
 @Service
 @Transactional(readOnly = true)
 public class FailureReportService {
-    private static final long TECHNICIAN_WORKLOAD_CAPACITY = 3;
     private static final Set<FailureStatus> ACTIVE_WORKLOAD_STATUSES = Set.of(
             FailureStatus.PENDIENTE,
             FailureStatus.ASIGNADA,
@@ -533,12 +532,11 @@ public class FailureReportService {
                 .filter(user -> !Boolean.FALSE.equals(user.getActivo()) && hasRole(user, "TECNICO"))
                 .sorted(Comparator.comparing(Usuario::getId))
                 .map(this::lockTechnician)
-                .filter(user -> activeWorkload(user) < TECHNICIAN_WORKLOAD_CAPACITY)
                 .sorted(Comparator.comparingLong(this::activeWorkload).thenComparing(Usuario::getId))
                 .toList();
         if (technicians.isEmpty()) {
             throw new ResponseStatusException(
-                    HttpStatus.CONFLICT, "No hay técnicos disponibles en el grupo (máximo 3 reportes activos por técnico)");
+                    HttpStatus.CONFLICT, "No hay técnicos activos en el grupo seleccionado para asignar el reporte");
         }
 
         Usuario selected = technicians.getFirst();

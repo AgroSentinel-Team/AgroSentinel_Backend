@@ -111,7 +111,7 @@ class FailureReportServiceTest {
     }
 
     @Test
-    void assignsAutomaticallyToTheAvailableTechnicianWithLowestWorkload() {
+    void continuesAutomaticAssignmentWhenAllTechniciansExceedCapacity() {
         FailureReportRepository reportRepository = mock(FailureReportRepository.class);
         AssetRepository assetRepository = mock(AssetRepository.class);
         UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
@@ -140,11 +140,11 @@ class FailureReportServiceTest {
         when(reportRepository.countByAssignedTechnicianIdAndEstadoIn(2L, Set.of(
                 FailureStatus.PENDIENTE, FailureStatus.ASIGNADA, FailureStatus.EN_EJECUCION,
                 FailureStatus.EN_CIERRE, FailureStatus.EN_REVISION, FailureStatus.ESPERA_REPUESTO)))
-                .thenReturn(2L);
+                .thenReturn(4L);
         when(reportRepository.countByAssignedTechnicianIdAndEstadoIn(3L, Set.of(
                 FailureStatus.PENDIENTE, FailureStatus.ASIGNADA, FailureStatus.EN_EJECUCION,
                 FailureStatus.EN_CIERRE, FailureStatus.EN_REVISION, FailureStatus.ESPERA_REPUESTO)))
-                .thenReturn(0L);
+                .thenReturn(5L);
         when(reportRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         FailureReportService service = new FailureReportService(
                 reportRepository, assetRepository, usuarioRepository, workGroupRepository, historyRepository,
@@ -155,8 +155,8 @@ class FailureReportServiceTest {
         var second = service.create(request(FailurePriority.MEDIA), null,
                 authentication(reporter.getEmail(), "ROLE_OPERATIVO_CAMPO"));
 
-        assertEquals(3L, first.assignedTechnicianId());
-        assertEquals(3L, second.assignedTechnicianId());
+        assertEquals(2L, first.assignedTechnicianId());
+        assertEquals(2L, second.assignedTechnicianId());
     }
 
     @Test
